@@ -1,0 +1,99 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-paper text-charcoal font-body antialiased;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading;
+  }
+  input, select, textarea {
+    @apply font-body;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-2xl shadow-card p-5 transition-shadow duration-200;
+  }
+  .card-hover {
+    @apply hover:shadow-cardHover;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm transition-all duration-150 active:scale-[.98] disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-ink text-white hover:bg-ink-600;
+  }
+  .btn-accent {
+    @apply btn bg-press text-white hover:bg-press-dark;
+  }
+  .btn-ghost {
+    @apply btn bg-transparent text-ink hover:bg-ink-50;
+  }
+  .btn-outline {
+    @apply btn bg-white border border-ink-100 text-ink hover:bg-ink-50;
+  }
+  .input {
+    @apply w-full bg-white border border-ink-100 rounded-xl px-4 py-2.5 text-sm text-charcoal placeholder:text-ink-200
+           focus:outline-none focus:ring-2 focus:ring-ink-500/30 focus:border-ink-500 transition-all;
+  }
+  .label {
+    @apply block text-xs font-semibold uppercase tracking-wide text-ink-400 mb-1.5;
+  }
+  .table-row-hover {
+    @apply hover:bg-ink-50/40 transition-colors cursor-pointer;
+  }
+  .pill {
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold;
+  }
+}
+
+/* Ink-drop animation for login */
+.ink-drop {
+  position: relative;
+  overflow: hidden;
+}
+.ink-drop::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 30% 30%, rgba(230, 57, 70, 0.12), transparent 60%);
+  animation: inkSpread 2s ease-out;
+  pointer-events: none;
+}
+@keyframes inkSpread {
+  0%   { transform: scale(0); opacity: 0; }
+  50%  { opacity: 1; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+/* Skeleton loader */
+.skeleton {
+  @apply bg-ink-50 rounded-md;
+  background: linear-gradient(90deg, rgba(231, 236, 243, .9) 0%, rgba(255,255,255,.9) 50%, rgba(231, 236, 243, .9) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Print invoice */
+@media print {
+  body * { visibility: hidden; }
+  #invoice-printable, #invoice-printable * { visibility: visible; }
+  #invoice-printable { position: absolute; left: 0; top: 0; width: 100%; }
+  .no-print { display: none !important; }
+}
+
+/* Hide number input arrows */
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; }

@@ -1,0 +1,553 @@
+import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
+import { supabase } from '../lib/supabase'
+import { formatINR, formatDate, formatDateTime, formatTime12, paymentStatusOf } from '../lib/format'
+import StatusBadge, { PaymentBadge, PaymentStatusBadge } from './StatusBadge'
+import ConfirmDialog from './ConfirmDialog'
+import WhatsAppButton from './WhatsAppButton'
+import { buildOrderMessage, buildStatusMessage } from '../lib/whatsapp'
+
+const STATUSES = ['Pending', 'In Progress', 'Ready for Pickup', 'Delivered'] // delivery statuses
+
+const DEFAULT_TYPES = [
+  'Banner', 'Flex', 'Poster', 'Pamphlet/Flyer', 'Brochure', 'Visiting Card',
+  'Letter Head', 'ID Card', 'Sticker', 'Calendar', 'Book Printing', 'Binding',
+  'Notebook', 'Bill Book', 'Invoice Book', 'Certificate', 'Envelope', 'Stamp',
+  'Receipt Book', 'Files & Folders'
+]
+const PAPER_SIZES = ['A3', 'A4', 'A5', 'A6', 'Other']
+
+// the WhatsApp message + button label for each delivery status
+const WA_LABELS = {
+  'Pending': 'Send order confirmation',
+  'In Progress': 'Send "work started" update',
+  'Ready for Pickup': 'Send "ready for pickup" update',
+  'Delivered': 'Send thank-you message'
+}
+
+export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate }) {
+  const navigate = useNavigate()
+  const [tab, setTab] = useState('details') // details | edit | payment
+  const [busy, setBusy] = useState(false)
+  const [payments, setPayments] = useState([])
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  // editable fields
+  const [form, setForm] = useState(null)
+  // payment fields
+  const [payAmount, setPayAmount] = useState('')
+  const [payType, setPayType] = useState('Cash')
+  const [jobTypes, setJobTypes] = useState(DEFAULT_TYPES)
+
+  // load job types (defaults + custom permanents) for the Edit tab dropdown
+  useEffect(() => {
+    supabase.from('job_types').select('name').order('name').then(({ data }) => {
+      if (data?.length) {
+        const names = data.map((x) => x.name)
+        const extras = names.filter((n) => !DEFAULT_TYPES.includes(n))
+        setJobTypes([...DEFAULT_TYPES.filter((n) => names.includes(n)), ...extras])
+      }
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!job) return
+    setTab('details')
+    setForm({
+      status: job.status,
+      quantity: job.quantity,
+      rate: job.rate,
+      delivery_date: job.delivery_date || '',
+      delivery_time: job.delivery_time || '',
+      notes: job.notes || '',
+      is_urgent: !!job.is_urgent,
+      assigned_to: job.assigned_to || '',
+      customerName: job.customers?.name || '',
+      contact: job.customers?.contact || '',
+      altContact: job.customers?.alt_contact || '',
+      jobType: job.job_type || '',
+      customJobType: job.custom_job_type || '',
+      paperSize: job.paper_size || '',
+      customPaperSize: job.custom_paper_size || '',
+      flexWidth: job.flex_width || '',
+      flexHeight: job.flex_height || '',
+      flexUnit: job.flex_unit || 'ft'
+    })
+    setPayAmount('')
+    setPayType('Cash')
+    loadPayments(job.id)
+  }, [job])
+
+  const loadPayments = async (id) => {
+    const { data } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('job_id', id)
+      .order('payment_date', { ascending: false })
+    setPayments(data || [])
+  }
+
+  if (!job || !form) return null
+
+  const customerName = job.customers?.name || '—'
+
+  const setStatus = async (status) => {
+    setBusy(true)
+    const { error } = await supabase.from('jobs').update({ status }).eq('id', job.id)
+    setBusy(false)
+    if (error) return toast.error('Could not update status')
+    toast.success(`Marked ${status}`)
+    setForm((f) => ({ ...f, status }))
+    onChanged?.()
+  }
+
+  const saveEdits = async () => {
+    const qty = Number(form.quantity) || 0
+    const rate = Number(form.rate) || 0
+    if (!form.customerName.trim()) return toast.error('Customer name is required')
+    if (!form.jobType) return toast.error('Select a job type')
+    if (form.jobType === 'Other' && !form.customJobType.trim()) return toast.error('Enter the custom job type')
+    if (form.paperSize === 'Other' && !form.customPaperSize.trim()) return toast.error('Enter the custom paper size')
+    if (qty <= 0) return toast.error('Quantity must be greater than 0')
+    setBusy(true)
+    try {
+      // 1. update the job details
+      const { error: jErr } = await supabase
+        .from('jobs')
+        .update({
+          job_type: form.jobType,
+          custom_job_type: form.jobType === 'Other' ? form.customJobType.trim() : null,
+          paper_size: form.paperSize || null,
+          custom_paper_size: form.paperSize === 'Other' ? form.customPaperSize.trim() : null,
+          flex_width: form.jobType === 'Flex' ? (form.flexWidth || null) : null,
+          flex_height: form.jobType === 'Flex' ? (form.flexHeight || null) : null,
+          flex_unit: form.jobType === 'Flex' ? form.flexUnit : null,
+          quantity: qty,
+          rate,
+          total_amount: qty * rate,
+          delivery_date: form.delivery_date || null,
+          delivery_time: form.delivery_time || null,
+          notes: form.notes || null,
+          status: form.status,
+          is_urgent: form.is_urgent,
+          assigned_to: form.assigned_to?.trim() || null
+        })
+        .eq('id', job.id)
+      if (jErr) throw jErr
+
+      // 2. update the linked customer's name / numbers
+      if (job.customer_id) {
+        await supabase.from('customers').update({
+          name: form.customerName.trim(),
+          contact: form.contact.trim() || null,
+          alt_contact: form.altContact.trim() || null
+        }).eq('id', job.customer_id)
+      }
+
+      toast.success('Job updated')
+      onChanged?.()
+    } catch (e) {
+      console.error(e)
+      toast.error('Could not save changes')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const addPayment = async () => {
+    const amount = Number(payAmount) || 0
+    if (amount <= 0) return toast.error('Enter a valid amount')
+    setBusy(true)
+    const { error: payErr } = await supabase.from('payments').insert({
+      job_id: job.id,
+      amount,
+      payment_type: payType
+    })
+    if (payErr) {
+      setBusy(false)
+      return toast.error('Could not record payment')
+    }
+    // payment status is derived from amount paid — no status field to update here
+    setBusy(false)
+    toast.success(`Payment of ${formatINR(amount)} recorded`)
+    setPayAmount('')
+    await loadPayments(job.id)
+    onChanged?.()
+  }
+
+  // Soft delete: remove this job's payments, flag the job as deleted (keeps its
+  // row so the Job ID is retired and it shows in the Deleted Jobs page).
+  const deleteJob = async () => {
+    setBusy(true)
+    try {
+      await supabase.from('payments').delete().eq('job_id', job.id)
+      const { error } = await supabase
+        .from('jobs')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', job.id)
+      if (error) throw error
+      toast.success(`${job.job_id} moved to Deleted Jobs`)
+      setConfirmDelete(false)
+      onChanged?.()
+      onClose?.()
+    } catch (e) {
+      console.error(e)
+      toast.error('Could not delete job')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const totalPaid = payments.reduce((s, p) => s + Number(p.amount), 0)
+  const balance = Math.max(0, Number(job.total_amount) - totalPaid)
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        className="fixed inset-0 z-50 bg-black/40"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+      >
+        <motion.aside
+          className="absolute top-0 right-0 h-full w-full max-w-md bg-paper shadow-panel flex flex-col"
+          initial={{ x: '100%' }}
+          animate={{ x: 0 }}
+          exit={{ x: '100%' }}
+          transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="bg-ink text-white px-5 py-4 flex items-start justify-between">
+            <div>
+              <div className="font-mono text-sm text-ink-100">{job.job_id}</div>
+              <div className="font-heading font-bold text-lg leading-tight">{customerName}</div>
+              <div className="text-[11px] text-ink-200">{job.customers?.contact || ''}</div>
+            </div>
+            <button onClick={onClose} className="text-xl leading-none text-ink-100 hover:text-white">✕</button>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex border-b border-ink-100 bg-white">
+            {[
+              ['details', 'Details'],
+              ['edit', 'Edit'],
+              ['payment', 'Payment']
+            ].map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className={`flex-1 py-3 text-sm font-semibold transition-colors ${
+                  tab === key ? 'text-press border-b-2 border-press' : 'text-ink-300 hover:text-ink'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-5 space-y-5">
+            {tab === 'details' && (
+              <>
+                <div className="card space-y-3">
+                  <Row label="Delivery Status"><StatusBadge status={form.status} /></Row>
+                  {form.is_urgent && <Row label="Priority"><span className="pill bg-press text-white">⚡ URGENT</span></Row>}
+                  {form.assigned_to && <Row label="Assigned to"><span className="pill bg-ink text-white">👤 {form.assigned_to}</span></Row>}
+                  <Row label="Payment Status"><PaymentStatusBadge status={paymentStatusOf(job, totalPaid)} /></Row>
+                  <Row label="Payment Method"><PaymentBadge type={job.payment_type} /></Row>
+                  <Row label="Job Type">{job.job_type === 'Other' ? job.custom_job_type : job.job_type}</Row>
+                  <Row label="Paper Size">{job.paper_size === 'Other' ? job.custom_paper_size : job.paper_size || '—'}</Row>
+                  {job.job_type === 'Flex' && (job.flex_width || job.flex_height) && (
+                    <Row label="Dimensions">{job.flex_width} × {job.flex_height} {job.flex_unit}</Row>
+                  )}
+                  <Row label="Quantity"><span className="font-mono">{job.quantity}</span></Row>
+                  <Row label="Rate"><span className="font-mono">{formatINR(job.rate)}</span></Row>
+                  <Row label="Total"><span className="font-mono font-semibold text-ink">{formatINR(job.total_amount)}</span></Row>
+                  {(job.payment_type === 'Credit' || totalPaid > 0) && (
+                    <>
+                      <Row label="Paid"><span className="font-mono text-leaf">{formatINR(totalPaid)}</span></Row>
+                      <Row label="Balance"><span className={`font-mono font-semibold ${balance > 0 ? 'text-press' : 'text-leaf'}`}>{formatINR(balance)}</span></Row>
+                    </>
+                  )}
+                  <Row label="Delivery">{job.delivery_date ? `${formatDate(job.delivery_date)}${job.delivery_time ? ' · ' + formatTime12(job.delivery_time) : ''}` : '—'}</Row>
+                  {job.status === 'Delivered' && job.delivered_at && (
+                    <Row label="Delivered on"><span className="text-leaf font-semibold">{formatDateTime(job.delivered_at)}</span></Row>
+                  )}
+                  <Row label="Created">{formatDateTime(job.created_at)}</Row>
+                  {job.notes && (
+                    <div className="pt-2 border-t border-ink-50">
+                      <div className="label">Notes</div>
+                      <div className="text-sm text-charcoal/80 whitespace-pre-wrap">{job.notes}</div>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <div className="label">Quick delivery status</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {STATUSES.map((s) => (
+                      <button
+                        key={s}
+                        disabled={busy || form.status === s}
+                        onClick={() => setStatus(s)}
+                        className={`btn text-sm ${form.status === s ? 'bg-ink text-white' : 'btn-outline'}`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <WhatsAppButton
+                  number={job.customers?.contact}
+                  message={form.status === 'Pending' ? buildOrderMessage(job) : buildStatusMessage(job, form.status)}
+                  label={WA_LABELS[form.status] || 'Send WhatsApp'}
+                  className="btn w-full bg-[#25D366] text-white hover:bg-[#1faa52] disabled:opacity-50" />
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button className="btn-primary" onClick={() => navigate(job.order_group ? `/order/${job.order_group}` : `/invoice/${job.id}`)}>View Invoice</button>
+                  <button className="btn-outline" onClick={() => onDuplicate?.(job)}>Duplicate Job</button>
+                </div>
+
+                <button
+                  className="w-full text-sm font-semibold text-press hover:bg-press/5 py-2.5 rounded-xl transition-colors"
+                  disabled={busy}
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  Delete Job
+                </button>
+              </>
+            )}
+
+            {tab === 'edit' && (
+              <div className="space-y-4">
+                {/* Customer */}
+                <div>
+                  <label className="label">Customer Name</label>
+                  <input className="input" value={form.customerName}
+                    onChange={(e) => setForm({ ...form, customerName: e.target.value })} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label">WhatsApp Number</label>
+                    <input className="input font-mono" value={form.contact}
+                      onChange={(e) => setForm({ ...form, contact: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="label">Additional Number</label>
+                    <input className="input font-mono" value={form.altContact}
+                      onChange={(e) => setForm({ ...form, altContact: e.target.value })} />
+                  </div>
+                </div>
+
+                {/* Job type */}
+                <div>
+                  <label className="label">Job Type</label>
+                  <select className="input" value={form.jobType}
+                    onChange={(e) => setForm({ ...form, jobType: e.target.value })}>
+                    <option value="">Select job type…</option>
+                    {jobTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+                    <option value="Other">Other…</option>
+                  </select>
+                </div>
+                {form.jobType === 'Other' && (
+                  <div>
+                    <label className="label">Custom Job Type</label>
+                    <input className="input" value={form.customJobType}
+                      onChange={(e) => setForm({ ...form, customJobType: e.target.value })} />
+                  </div>
+                )}
+
+                {/* Flex dimensions */}
+                {form.jobType === 'Flex' && (
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="label">Width</label>
+                      <input type="number" className="input font-mono" value={form.flexWidth}
+                        onChange={(e) => setForm({ ...form, flexWidth: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="label">Height</label>
+                      <input type="number" className="input font-mono" value={form.flexHeight}
+                        onChange={(e) => setForm({ ...form, flexHeight: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="label">Unit</label>
+                      <select className="input" value={form.flexUnit}
+                        onChange={(e) => setForm({ ...form, flexUnit: e.target.value })}>
+                        <option value="ft">ft</option>
+                        <option value="inches">inches</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {/* Paper size */}
+                <div>
+                  <label className="label">Paper Size</label>
+                  <select className="input" value={form.paperSize}
+                    onChange={(e) => setForm({ ...form, paperSize: e.target.value })}>
+                    <option value="">Select size…</option>
+                    {PAPER_SIZES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                {form.paperSize === 'Other' && (
+                  <div>
+                    <label className="label">Custom Paper Size</label>
+                    <input className="input" value={form.customPaperSize}
+                      onChange={(e) => setForm({ ...form, customPaperSize: e.target.value })} />
+                  </div>
+                )}
+
+                {/* Quantity / Rate */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label">Quantity</label>
+                    <input type="number" className="input font-mono" value={form.quantity}
+                      onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="label">Rate (₹)</label>
+                    <input type="number" className="input font-mono" value={form.rate}
+                      onChange={(e) => setForm({ ...form, rate: e.target.value })} />
+                  </div>
+                </div>
+                <div className="card bg-leaf/5 flex items-center justify-between">
+                  <span className="label mb-0">New Total</span>
+                  <span className="font-mono font-semibold text-leaf text-lg">
+                    {formatINR((Number(form.quantity) || 0) * (Number(form.rate) || 0))}
+                  </span>
+                </div>
+
+                {/* Delivery status + urgent + assign */}
+                <div>
+                  <label className="label">Delivery Status</label>
+                  <select className="input" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                    {STATUSES.map((s) => <option key={s}>{s}</option>)}
+                  </select>
+                </div>
+
+                <button type="button" onClick={() => setForm({ ...form, is_urgent: !form.is_urgent })}
+                  className={`w-full flex items-center justify-between rounded-xl border-2 px-4 py-3 transition-colors
+                    ${form.is_urgent ? 'border-press bg-press/5' : 'border-ink-100 bg-white hover:bg-ink-50'}`}>
+                  <span className="flex items-center gap-2 font-semibold text-charcoal">⚡ Urgent</span>
+                  <span className={`w-11 h-6 rounded-full p-0.5 transition-colors ${form.is_urgent ? 'bg-press' : 'bg-ink-100'}`}>
+                    <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform ${form.is_urgent ? 'translate-x-5' : ''}`} />
+                  </span>
+                </button>
+
+                <div>
+                  <label className="label">Assign to Employee</label>
+                  <input className="input" placeholder="Employee name"
+                    value={form.assigned_to}
+                    onChange={(e) => setForm({ ...form, assigned_to: e.target.value })} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label">Delivery Date</label>
+                    <input type="date" className="input" value={form.delivery_date || ''}
+                      onChange={(e) => setForm({ ...form, delivery_date: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="label">Delivery Time</label>
+                    <input type="time" className="input" value={form.delivery_time || ''}
+                      onChange={(e) => setForm({ ...form, delivery_time: e.target.value })} />
+                  </div>
+                </div>
+                <div>
+                  <label className="label">Notes</label>
+                  <textarea className="input min-h-[90px]" value={form.notes}
+                    onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+                </div>
+                <button className="btn-primary w-full" disabled={busy} onClick={saveEdits}>
+                  {busy ? 'Saving…' : 'Save changes'}
+                </button>
+              </div>
+            )}
+
+            {tab === 'payment' && (
+              <div className="space-y-5">
+                <div className="card space-y-2">
+                  <Row label="Total"><span className="font-mono">{formatINR(job.total_amount)}</span></Row>
+                  <Row label="Paid"><span className="font-mono text-leaf">{formatINR(totalPaid)}</span></Row>
+                  <Row label="Balance"><span className="font-mono font-semibold text-press">{formatINR(balance)}</span></Row>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="label">Amount received</label>
+                    <input type="number" className="input font-mono" placeholder="0"
+                      value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="label">Payment type</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {['Cash', 'UPI'].map((t) => (
+                        <button key={t} type="button"
+                          onClick={() => setPayType(t)}
+                          className={`btn text-sm ${payType === t ? 'bg-ink text-white' : 'btn-outline'}`}>
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button className="btn-accent flex-1" disabled={busy} onClick={addPayment}>
+                      Record payment
+                    </button>
+                    <button className="btn-outline" disabled={busy}
+                      onClick={() => { setPayAmount(String(balance)); }}>
+                      Full ({formatINR(balance)})
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="label">Payment history</div>
+                  {payments.length === 0 ? (
+                    <div className="text-sm text-ink-300">No payments recorded yet.</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {payments.map((p) => (
+                        <div key={p.id} className="flex items-center justify-between text-sm bg-white rounded-xl px-3 py-2 shadow-card">
+                          <div>
+                            <span className="font-mono font-semibold">{formatINR(p.amount)}</span>
+                            <span className="ml-2 text-ink-300">{p.payment_type}</span>
+                          </div>
+                          <span className="text-xs text-ink-300">{formatDateTime(p.payment_date)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </motion.aside>
+      </motion.div>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        danger
+        title="Delete this job?"
+        message={`${job.job_id} (${customerName}) will be moved to Deleted Jobs. Its Job ID will not be reused, and you can restore it later. Any recorded payments for it will be removed.`}
+        confirmText="Delete"
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={deleteJob}
+      />
+    </AnimatePresence>
+  )
+}
+
+function Row({ label, children }) {
+  return (
+    <div className="flex items-center justify-between gap-3 text-sm">
+      <span className="text-ink-300">{label}</span>
+      <span className="text-charcoal font-medium text-right">{children}</span>
+    </div>
+  )
+}
