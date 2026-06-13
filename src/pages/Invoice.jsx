@@ -30,7 +30,7 @@ export default function Invoice() {
   const load = async () => {
     setLoading(true)
     const { data, error } = await supabase
-      .from('jobs').select('*, customers(name,contact,alt_contact)').eq('id', jobId).single()
+      .from('jobs').select('*, customers(name,contact,alt_contact,place)').eq('id', jobId).single()
     if (error || !data) {
       toast.error('Invoice not found')
       navigate('/jobs')
@@ -123,6 +123,7 @@ export default function Invoice() {
           <div>
             <div className="text-[11px] font-bold tracking-[0.18em] text-charcoal">INVOICE TO</div>
             <div className="font-heading font-extrabold text-2xl text-charcoal leading-tight mt-1">{job.customers?.name || '—'}</div>
+            {job.customers?.place && <div className="text-sm text-gray-500 mt-0.5">{job.customers.place}</div>}
             <div className="mt-4 border-t border-gray-200 pt-3 text-sm space-y-0.5">
               <div className="font-semibold text-charcoal mb-1">Contact Person</div>
               {job.customers?.contact

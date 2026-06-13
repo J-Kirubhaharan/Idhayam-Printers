@@ -16,6 +16,7 @@ const links = [
   { to: '/credit', key: 'nav.credit', icon: '₹' },
   { to: '/expenses', key: 'nav.expenses', icon: '−' },
   { to: '/daily-summary', key: 'nav.dailySummary', icon: '◐' },
+  { to: '/all-orders', key: 'nav.allOrders', icon: '📒' },
   { to: '/reports', key: 'nav.reports', icon: '▲' }
 ]
 

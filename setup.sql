@@ -14,6 +14,7 @@ create table if not exists customers (
   name text not null,
   contact text,        -- primary / WhatsApp number
   alt_contact text,    -- additional number (optional)
+  place text,          -- town / area, used to tell same-name customers apart
   total_spent numeric(12,2) default 0,
   total_pending numeric(12,2) default 0,
   created_at timestamptz default now()
@@ -21,8 +22,9 @@ create table if not exists customers (
 
 create index if not exists idx_customers_name on customers (lower(name));
 
--- additional number (for existing databases)
+-- columns added for existing databases (safe to re-run)
 alter table customers add column if not exists alt_contact text;
+alter table customers add column if not exists place text;
 
 -- ============================================================
 -- 2. JOB TYPES (master list + custom usage tracking)

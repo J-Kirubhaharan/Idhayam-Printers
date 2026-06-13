@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import { supabase } from '../lib/supabase'
 import { formatINR, todayIST } from '../lib/format'
 import WhatsAppIcon from '../components/WhatsAppIcon'
+import TimePicker from '../components/TimePicker'
 
 const DEFAULT_TYPES = [
   'Banner', 'Flex', 'Poster', 'Pamphlet/Flyer', 'Brochure', 'Visiting Card',
@@ -24,6 +25,7 @@ const emptyForm = {
   customerName: '',
   whatsapp: '',
   additionalContact: '',
+  place: '',
   items: [emptyItem()],
   deliveryDate: '',
   deliveryTime: '',
@@ -59,7 +61,7 @@ export default function NewJob() {
     ;(async () => {
       const [{ data: jt }, { data: cs }] = await Promise.all([
         supabase.from('job_types').select('name').order('name'),
-        supabase.from('customers').select('id,name,contact,alt_contact').order('name')
+        supabase.from('customers').select('id,name,contact,alt_contact,place').order('name')
       ])
       if (jt?.length) {
         const names = jt.map((x) => x.name)
@@ -78,6 +80,7 @@ export default function NewJob() {
         customerName: dup.customers?.name || '',
         whatsapp: dup.customers?.contact || '',
         additionalContact: dup.customers?.alt_contact || '',
+        place: dup.customers?.place || '',
         items: [{
           jobType: dup.job_type || '',
           customJobType: dup.custom_job_type || '',
@@ -183,33 +186,38 @@ export default function NewJob() {
       const name = form.customerName.trim()
       const phone = form.whatsapp.trim()
       const altPhone = form.additionalContact.trim()
+      const place = form.place.trim()
 
       let existing = null
       if (phone) {
         // match a saved customer whose primary or alternate number is this phone
         const { data } = await supabase
-          .from('customers').select('id,name,contact,alt_contact')
+          .from('customers').select('id,name,contact,alt_contact,place')
           .or(`contact.eq.${phone},alt_contact.eq.${phone}`).limit(1)
         existing = data?.[0] || null
       } else {
-        // no number entered — match only against other no-number customers by name
-        const { data } = await supabase
-          .from('customers').select('id,name,contact,alt_contact')
-          .ilike('name', name).is('contact', null).limit(1)
+        // no number — match other no-number customers by name AND place (so two
+        // same-name walk-ins from different places stay separate)
+        let q = supabase
+          .from('customers').select('id,name,contact,alt_contact,place')
+          .ilike('name', name).is('contact', null)
+        q = place ? q.ilike('place', place) : q.is('place', null)
+        const { data } = await q.limit(1)
         existing = data?.[0] || null
       }
 
       if (existing) {
         customerId = existing.id
-        // fill in any blank contact fields, but never overwrite an existing number
+        // fill in any blank fields, but never overwrite existing info
         const patch = {}
         if (phone && !existing.contact) patch.contact = phone
         if (altPhone && !existing.alt_contact) patch.alt_contact = altPhone
+        if (place && !existing.place) patch.place = place
         if (Object.keys(patch).length) await supabase.from('customers').update(patch).eq('id', customerId)
       } else {
         const { data: created, error: cErr } = await supabase
           .from('customers')
-          .insert({ name, contact: phone || null, alt_contact: altPhone || null })
+          .insert({ name, contact: phone || null, alt_contact: altPhone || null, place: place || null })
           .select('id').single()
         if (cErr) throw cErr
         customerId = created.id
@@ -336,10 +344,11 @@ export default function NewJob() {
                   <div className="absolute z-20 mt-1 w-full bg-white rounded-xl shadow-cardHover border border-ink-50 overflow-hidden">
                     {suggestions.map((c) => (
                       <button key={c.id} type="button"
-                        onMouseDown={() => { set('customerName', c.name); set('whatsapp', c.contact || ''); set('additionalContact', c.alt_contact || ''); setShowSuggest(false) }}
+                        onMouseDown={() => { set('customerName', c.name); set('whatsapp', c.contact || ''); set('additionalContact', c.alt_contact || ''); set('place', c.place || ''); setShowSuggest(false) }}
                         className="w-full text-left px-4 py-2.5 hover:bg-ink-50 text-sm">
                         <span className="font-medium text-charcoal">{c.name}</span>
-                        {c.contact && <span className="text-ink-300 ml-2 text-xs">{c.contact}</span>}
+                        {c.place && <span className="text-press ml-2 text-xs">· {c.place}</span>}
+                        {c.contact && <span className="text-ink-300 ml-2 text-xs font-mono">{c.contact}</span>}
                       </button>
                     ))}
                   </div>
@@ -360,6 +369,13 @@ export default function NewJob() {
                 <input className="input font-mono" placeholder="Alternate number" value={form.additionalContact}
                   autoComplete="off" inputMode="numeric"
                   onChange={(e) => set('additionalContact', e.target.value)} />
+              </div>
+              <div>
+                <label className="label">Place / Area (optional)</label>
+                <input className="input" placeholder="e.g. Kalaiyarkovil, Karaikudi…" value={form.place}
+                  autoComplete="off"
+                  onChange={(e) => set('place', e.target.value)} />
+                <p className="text-[11px] text-ink-300 mt-1">Helps tell apart customers with the same name.</p>
               </div>
             </motion.div>
           )}
@@ -467,8 +483,7 @@ export default function NewJob() {
                 </div>
                 <div>
                   <label className="label">Delivery Time (optional)</label>
-                  <input type="time" className="input" value={form.deliveryTime}
-                    onChange={(e) => set('deliveryTime', e.target.value)} />
+                  <TimePicker value={form.deliveryTime} onChange={(v) => set('deliveryTime', v)} />
                 </div>
               </div>
               <div>
@@ -551,6 +566,7 @@ export default function NewJob() {
               <div className="card bg-paper space-y-2.5">
                 <h3 className="font-heading font-bold text-ink mb-1">Order Summary</h3>
                 <SummaryRow label="Customer" value={form.customerName} />
+                {form.place && <SummaryRow label="Place" value={form.place} />}
                 {form.whatsapp && <SummaryRow label="WhatsApp" value={form.whatsapp} />}
 
                 <div className="pt-2 border-t border-ink-50 space-y-1.5">

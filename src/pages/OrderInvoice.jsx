@@ -31,7 +31,7 @@ export default function OrderInvoice() {
   const load = async () => {
     setLoading(true)
     const { data, error } = await supabase
-      .from('jobs').select('*, customers(name,contact,alt_contact)')
+      .from('jobs').select('*, customers(name,contact,alt_contact,place)')
       .eq('order_group', groupId).is('deleted_at', null)
       .order('created_at', { ascending: true })
     if (error || !data?.length) {
@@ -131,6 +131,7 @@ export default function OrderInvoice() {
           <div>
             <div className="text-[11px] font-bold tracking-[0.18em] text-charcoal">INVOICE TO</div>
             <div className="font-heading font-extrabold text-2xl text-charcoal leading-tight mt-1">{cust?.name || '—'}</div>
+            {cust?.place && <div className="text-sm text-gray-500 mt-0.5">{cust.place}</div>}
             <div className="mt-4 border-t border-gray-200 pt-3 text-sm space-y-0.5">
               <div className="font-semibold text-charcoal mb-1">Contact Person</div>
               {cust?.contact

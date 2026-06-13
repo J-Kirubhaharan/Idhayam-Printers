@@ -38,7 +38,9 @@ export default function Customers() {
     const q = query.trim().toLowerCase()
     if (!q) return customers
     return customers.filter((c) =>
-      c.name.toLowerCase().includes(q) || (c.contact || '').toLowerCase().includes(q))
+      c.name.toLowerCase().includes(q) ||
+      (c.contact || '').toLowerCase().includes(q) ||
+      (c.place || '').toLowerCase().includes(q))
   }, [customers, query])
 
   const lastJobDate = jobs.length ? jobs[0].created_at : null
@@ -52,7 +54,7 @@ export default function Customers() {
 
       <div className="relative">
         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-300">⌕</span>
-        <input className="input pl-10" placeholder="Search by name or contact…"
+        <input className="input pl-10" placeholder="Search by name, place or contact…"
           value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
 
@@ -74,7 +76,9 @@ export default function Customers() {
                   {c.name.charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0">
-                  <div className="font-heading font-semibold text-ink truncate">{c.name}</div>
+                  <div className="font-heading font-semibold text-ink truncate">
+                    {c.name}{c.place && <span className="text-press font-normal text-sm"> · {c.place}</span>}
+                  </div>
                   <div className="text-xs text-ink-300 font-mono">{c.contact || 'No contact'}</div>
                 </div>
               </div>
@@ -107,6 +111,7 @@ export default function Customers() {
               <div className="bg-ink text-white px-5 py-4 flex items-start justify-between">
                 <div>
                   <div className="font-heading font-bold text-lg leading-tight">{selected.name}</div>
+                  {selected.place && <div className="text-[11px] text-ink-100">{selected.place}</div>}
                   <div className="text-[11px] text-ink-200 font-mono">{selected.contact || 'No contact'}</div>
                 </div>
                 <button onClick={() => setSelected(null)} className="text-xl leading-none text-ink-100 hover:text-white">✕</button>

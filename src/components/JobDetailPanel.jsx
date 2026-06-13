@@ -7,6 +7,7 @@ import { formatINR, formatDate, formatDateTime, formatTime12, paymentStatusOf } 
 import StatusBadge, { PaymentBadge, PaymentStatusBadge } from './StatusBadge'
 import ConfirmDialog from './ConfirmDialog'
 import WhatsAppButton from './WhatsAppButton'
+import TimePicker from './TimePicker'
 import { buildOrderMessage, buildStatusMessage } from '../lib/whatsapp'
 
 const STATUSES = ['Pending', 'In Progress', 'Ready for Pickup', 'Delivered'] // delivery statuses
@@ -67,6 +68,7 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
       customerName: job.customers?.name || '',
       contact: job.customers?.contact || '',
       altContact: job.customers?.alt_contact || '',
+      place: job.customers?.place || '',
       jobType: job.job_type || '',
       customJobType: job.custom_job_type || '',
       paperSize: job.paper_size || '',
@@ -142,7 +144,8 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
         await supabase.from('customers').update({
           name: form.customerName.trim(),
           contact: form.contact.trim() || null,
-          alt_contact: form.altContact.trim() || null
+          alt_contact: form.altContact.trim() || null,
+          place: form.place.trim() || null
         }).eq('id', job.customer_id)
       }
 
@@ -330,6 +333,11 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
                   <input className="input" value={form.customerName}
                     onChange={(e) => setForm({ ...form, customerName: e.target.value })} />
                 </div>
+                <div>
+                  <label className="label">Place / Area</label>
+                  <input className="input" placeholder="e.g. Kalaiyarkovil, Karaikudi…" value={form.place}
+                    onChange={(e) => setForm({ ...form, place: e.target.value })} />
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="label">WhatsApp Number</label>
@@ -454,8 +462,8 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
                   </div>
                   <div>
                     <label className="label">Delivery Time</label>
-                    <input type="time" className="input" value={form.delivery_time || ''}
-                      onChange={(e) => setForm({ ...form, delivery_time: e.target.value })} />
+                    <TimePicker value={form.delivery_time || ''}
+                      onChange={(v) => setForm({ ...form, delivery_time: v })} />
                   </div>
                 </div>
                 <div>

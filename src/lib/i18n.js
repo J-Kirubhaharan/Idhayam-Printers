@@ -13,6 +13,7 @@ export const strings = {
   'nav.credit': { en: 'Credit', ta: 'கடன்' },
   'nav.expenses': { en: 'Expenses', ta: 'செலவுகள்' },
   'nav.dailySummary': { en: 'Daily Summary', ta: 'தினசரி சுருக்கம்' },
+  'nav.allOrders': { en: 'All Orders', ta: 'அனைத்து ஆர்டர்கள்' },
   'nav.reports': { en: 'Reports', ta: 'அறிக்கைகள்' },
 
   'common.signOut': { en: 'Sign out', ta: 'வெளியேறு' },
