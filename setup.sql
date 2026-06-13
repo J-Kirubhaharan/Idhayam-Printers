@@ -525,16 +525,35 @@ create table if not exists activity_log (
   job_id uuid,
   job_code text,        -- the display Job ID (IPO-...)
   customer_name text,
-  event text,           -- 'Design started', 'Design finished', etc.
-  actor text,           -- which team did it ('design' / 'print')
+  event text,           -- 'Design started', 'New printing job arrived', 'Updated: Quantity', etc.
+  actor text,           -- who triggered it ('design' / 'print' / 'owner')
+  target text not null default 'owner',  -- who should SEE it: 'owner' | 'design' | 'print'
   created_at timestamptz default now()
 );
 create index if not exists idx_activity_created on activity_log (created_at desc);
+alter table activity_log add column if not exists target text not null default 'owner';
 
 alter table activity_log enable row level security;
+-- owner sees everything; each team sees only rows addressed to them
 drop policy if exists "activity_owner_read" on activity_log;
 create policy "activity_owner_read" on activity_log
   for select to authenticated using (is_owner());
+drop policy if exists "activity_team_read" on activity_log;
+create policy "activity_team_read" on activity_log
+  for select to authenticated
+  using (target = (select role from profiles where id = auth.uid()));
+-- the owner login may write team-addressed notifications (new job / edits)
+drop policy if exists "activity_owner_insert" on activity_log;
+create policy "activity_owner_insert" on activity_log
+  for insert to authenticated with check (is_owner());
+-- dismissing a notification: owner can clear any; a team can clear its own
+drop policy if exists "activity_owner_delete" on activity_log;
+create policy "activity_owner_delete" on activity_log
+  for delete to authenticated using (is_owner());
+drop policy if exists "activity_team_delete" on activity_log;
+create policy "activity_team_delete" on activity_log
+  for delete to authenticated
+  using (target = (select role from profiles where id = auth.uid()));
 
 -- The only way teams change a job's stage. SECURITY DEFINER so design/print
 -- logins need no write access to jobs. Validates role, advances the stage,
@@ -572,8 +591,15 @@ begin
   update jobs set production_stage = new_stage where id = p_job;
 
   select name into cust_name from customers where id = j.customer_id;
-  insert into activity_log (job_id, job_code, customer_name, event, actor)
-    values (p_job, j.job_id, coalesce(cust_name, '-'), evt, r);
+  -- the owner sees the production event with its proper wording
+  insert into activity_log (job_id, job_code, customer_name, event, actor, target)
+    values (p_job, j.job_id, coalesce(cust_name, '-'), evt, r, 'owner');
+
+  -- when design hands a job to printing, alert the print team that work arrived
+  if p_action = 'finish_design' and new_stage = 'Print Queue' then
+    insert into activity_log (job_id, job_code, customer_name, event, actor, target)
+      values (p_job, j.job_id, coalesce(cust_name, '-'), 'New printing job arrived', r, 'print');
+  end if;
 
   return new_stage;
 end;

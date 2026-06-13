@@ -244,14 +244,17 @@ export default function NewJob() {
       // 3. create one job per item, all sharing an order group
       const orderGroup = crypto.randomUUID()
       const created = []
+      const notifs = []  // "new work arrived" alerts for the design / print teams
       let itemNo = 0
       for (const it of form.items) {
         itemNo += 1
         await bumpJobType(resolveType(it), it.jobType === 'Other')
+        const jobCode = multi ? `${baseStr}-${itemNo}` : baseStr
+        const stage = startStage(it.needsDesign, it.needsPrinting)
         const { data: job, error: jErr } = await supabase.from('jobs').insert({
           customer_id: customerId,
           order_group: orderGroup,
-          job_id: multi ? `${baseStr}-${itemNo}` : baseStr,
+          job_id: jobCode,
           job_type: it.jobType,
           custom_job_type: it.jobType === 'Other' ? it.customJobType.trim() : null,
           paper_size: it.paperSize || null,
@@ -266,7 +269,7 @@ export default function NewJob() {
           assigned_to: form.assignedTo.trim() || null,
           needs_design: it.needsDesign,
           needs_printing: it.needsPrinting,
-          production_stage: startStage(it.needsDesign, it.needsPrinting),
+          production_stage: stage,
           payment_type: form.paymentType,
           status: 'Pending',
           delivery_date: form.deliveryDate || null,
@@ -275,7 +278,16 @@ export default function NewJob() {
         }).select('id, total_amount').single()
         if (jErr) throw jErr
         created.push(job)
+
+        // tell the team that gets this item first that new work has arrived
+        const tgt = stage === 'Design Queue' ? 'design' : stage === 'Print Queue' ? 'print' : null
+        if (tgt) notifs.push({
+          job_id: job.id, job_code: jobCode, customer_name: name,
+          event: tgt === 'design' ? 'New design job arrived' : 'New printing job arrived',
+          actor: 'owner', target: tgt
+        })
       }
+      if (notifs.length) await supabase.from('activity_log').insert(notifs)
 
       // 4. spread the money received now across the jobs (oldest first)
       let remaining = paidNowNum
@@ -293,6 +305,7 @@ export default function NewJob() {
       }
 
       localStorage.removeItem(DRAFT_KEY)
+      window.dispatchEvent(new Event('idhayam:refresh-notifs'))
       toast.success(created.length > 1 ? `${created.length} jobs created` : 'Job created')
       navigate(`/order/${orderGroup}`)
     } catch (err) {

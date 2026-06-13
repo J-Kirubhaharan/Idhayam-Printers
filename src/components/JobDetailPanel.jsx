@@ -115,6 +115,26 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
     if (qty <= 0) return toast.error('Quantity must be greater than 0')
     setBusy(true)
     try {
+      // detect what changed (excluding customer name/phone/place) so we can
+      // notify whichever team currently holds the job
+      const changes = []
+      const oldType = job.job_type === 'Other' ? job.custom_job_type : job.job_type
+      const newType = form.jobType === 'Other' ? form.customJobType.trim() : form.jobType
+      if ((oldType || '') !== (newType || '')) changes.push('Job type')
+      const oldPaper = job.paper_size === 'Other' ? job.custom_paper_size : job.paper_size
+      const newPaper = form.paperSize === 'Other' ? form.customPaperSize.trim() : form.paperSize
+      const oldFlex = job.job_type === 'Flex' ? `${job.flex_width || ''}x${job.flex_height || ''}${job.flex_unit || ''}` : ''
+      const newFlex = form.jobType === 'Flex' ? `${form.flexWidth || ''}x${form.flexHeight || ''}${form.flexUnit || ''}` : ''
+      if ((oldPaper || '') !== (newPaper || '') || oldFlex !== newFlex) changes.push('Size')
+      if (Number(job.quantity) !== qty) changes.push('Quantity')
+      if (Number(job.rate) !== rate) changes.push('Rate')
+      if ((job.delivery_date || '') !== (form.delivery_date || '')) changes.push('Delivery date')
+      if ((job.delivery_time || '') !== (form.delivery_time || '')) changes.push('Delivery time')
+      if (!!job.is_urgent !== !!form.is_urgent) changes.push('Urgent')
+      if ((job.assigned_to || '') !== (form.assigned_to?.trim() || '')) changes.push('Assigned to')
+      if ((job.notes || '') !== (form.notes || '')) changes.push('Notes')
+      if (job.status !== form.status) changes.push('Status')
+
       // 1. update the job details
       const { error: jErr } = await supabase
         .from('jobs')
@@ -149,6 +169,19 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
         }).eq('id', job.customer_id)
       }
 
+      // 3. notify the team currently holding the job about the changes
+      const stage = job.production_stage
+      const target = ['Design Queue', 'Designing'].includes(stage) ? 'design'
+        : ['Print Queue', 'Printing'].includes(stage) ? 'print' : null
+      if (target && changes.length) {
+        await supabase.from('activity_log').insert({
+          job_id: job.id, job_code: job.job_id,
+          customer_name: form.customerName.trim() || job.customers?.name || '-',
+          event: `Updated: ${changes.join(', ')}`, actor: 'owner', target
+        })
+      }
+
+      window.dispatchEvent(new Event('idhayam:refresh-notifs'))
       toast.success('Job updated')
       onChanged?.()
     } catch (e) {

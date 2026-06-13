@@ -19,6 +19,10 @@ export const strings = {
   'common.signOut': { en: 'Sign out', ta: 'வெளியேறு' },
   'common.signedInAs': { en: 'Signed in as', ta: 'உள்நுழைந்தவர்' },
   'common.viewAll': { en: 'View all', ta: 'அனைத்தும்' },
+  'common.start': { en: 'Start', ta: 'தொடங்கு' },
+  'common.finish': { en: 'Finish ✓', ta: 'முடி ✓' },
+  'common.notifications': { en: 'Notifications', ta: 'அறிவிப்புகள்' },
+  'common.allCaughtUp': { en: "You're all caught up", ta: 'அனைத்தும் பார்த்தாயிற்று' },
 
   // Dashboard
   'dashboard.title': { en: 'Dashboard', ta: 'டாஷ்போர்டு' },
@@ -53,6 +57,21 @@ export const strings = {
   'board.noActive': { en: 'No active orders right now. New jobs appear here instantly.', ta: 'தற்போது வேலைகள் இல்லை. புதிய வேலைகள் உடனே இங்கே தோன்றும்.' },
   'board.tapDetails': { en: 'Tap for full details', ta: 'விவரங்களுக்கு தட்டவும்' },
   'board.tapCollapse': { en: 'Tap to collapse', ta: 'மூட தட்டவும்' },
+
+  // Team boards (design / print)
+  'board.designTitle': { en: 'Idhayam — Design', ta: 'இதயம் — டிசைன்' },
+  'board.printTitle': { en: 'Idhayam — Printing', ta: 'இதயம் — அச்சு' },
+  'board.jobs': { en: 'jobs', ta: 'வேலைகள்' },
+  'board.nothingPending': { en: 'Nothing pending', ta: 'நிலுவையில் எதுவும் இல்லை' },
+  'board.workAppears': { en: 'New work will appear here automatically.', ta: 'புதிய வேலை தானாக இங்கே தோன்றும்.' },
+  'pstage.Design Queue': { en: 'Design Queue', ta: 'டிசைன் வரிசை' },
+  'pstage.Designing': { en: 'Designing', ta: 'டிசைன் நடக்கிறது' },
+  'pstage.Print Queue': { en: 'Print Queue', ta: 'அச்சு வரிசை' },
+  'pstage.Printing': { en: 'Printing', ta: 'அச்சு நடக்கிறது' },
+  'paction.start_design': { en: 'Start Design', ta: 'டிசைன் தொடங்கு' },
+  'paction.finish_design': { en: 'Design Finished ✓', ta: 'டிசைன் முடிந்தது ✓' },
+  'paction.start_print': { en: 'Start Printing', ta: 'அச்சு தொடங்கு' },
+  'paction.finish_print': { en: 'Printing Finished ✓', ta: 'அச்சு முடிந்தது ✓' },
 
   // Field labels
   'field.jobType': { en: 'Job Type', ta: 'வேலை வகை' },

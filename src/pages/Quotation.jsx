@@ -201,19 +201,16 @@ export default function Quotation() {
         className="bg-white shadow-card mx-auto flex flex-col"
         style={{ width: '794px', minHeight: '1123px' }}>
 
-        {/* Top: QUOTATION wordmark + logo */}
+        {/* Top: big logo + shop name (left), small QUOTATION (right) */}
         <div className="px-10 pt-10 flex items-start justify-between gap-6">
-          <div className="flex items-center gap-3">
-            <h1 className="font-heading font-extrabold text-6xl text-ink-300 leading-none tracking-tight">QUOTATION</h1>
-            <span className="inline-block w-10 h-1.5 bg-press rounded-full self-end mb-3" />
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <ShopLogo size={56} />
+          <div className="flex items-center gap-4">
+            <ShopLogo size={96} />
             <div>
-              <div className="font-heading font-extrabold text-ink leading-tight">Idhayam</div>
-              <div className="text-[10px] tracking-[0.2em] text-press font-bold">PRINTERS</div>
+              <div className="font-heading font-extrabold text-3xl text-ink leading-none">Idhayam</div>
+              <div className="text-base tracking-[0.28em] text-press font-bold mt-1">PRINTERS</div>
             </div>
           </div>
+          <h1 className="font-heading font-extrabold text-4xl text-ink-300 leading-none tracking-tight shrink-0">QUOTATION</h1>
         </div>
 
         {/* Subject line (the customer's shop / business) */}

@@ -3,27 +3,30 @@ import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
-import { formatDate, formatTime12, todayIST } from '../lib/format'
+import { useLang } from '../context/LanguageContext'
+import { formatDate, formatDateTime, formatTime12, todayIST } from '../lib/format'
 import Clock from './Clock'
+import LangToggle from './LangToggle'
+import BoardNotifications from './BoardNotifications'
 
 // team config: which stages this team works on, and the button for each stage
 const CONFIG = {
   design: {
-    title: 'Idhayam — Design',
+    titleKey: 'board.designTitle',
     accent: 'bg-press',
     stages: ['Design Queue', 'Designing'],
     button: {
-      'Design Queue': { label: 'Start Design', action: 'start_design', cls: 'bg-ink hover:bg-ink-600' },
-      'Designing': { label: 'Design Finished ✓', action: 'finish_design', cls: 'bg-leaf hover:opacity-90' }
+      'Design Queue': { action: 'start_design', cls: 'bg-ink hover:bg-ink-600' },
+      'Designing': { action: 'finish_design', cls: 'bg-leaf hover:opacity-90' }
     }
   },
   print: {
-    title: 'Idhayam — Printing',
+    titleKey: 'board.printTitle',
     accent: 'bg-ink',
     stages: ['Print Queue', 'Printing'],
     button: {
-      'Print Queue': { label: 'Start Printing', action: 'start_print', cls: 'bg-ink hover:bg-ink-600' },
-      'Printing': { label: 'Printing Finished ✓', action: 'finish_print', cls: 'bg-leaf hover:opacity-90' }
+      'Print Queue': { action: 'start_print', cls: 'bg-ink hover:bg-ink-600' },
+      'Printing': { action: 'finish_print', cls: 'bg-leaf hover:opacity-90' }
     }
   }
 }
@@ -38,6 +41,7 @@ const STAGE_PILL = {
 export default function TeamBoard({ team }) {
   const cfg = CONFIG[team]
   const { signOut } = useAuth()
+  const { t } = useLang()
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState(null)
@@ -85,23 +89,25 @@ export default function TeamBoard({ team }) {
             <span className="font-heading font-extrabold text-white text-lg leading-none">IP</span>
           </div>
           <div className="min-w-0">
-            <div className="font-heading font-bold text-lg sm:text-xl leading-tight truncate">{cfg.title}</div>
+            <div className="font-heading font-bold text-lg sm:text-xl leading-tight truncate">{t(cfg.titleKey)}</div>
           </div>
         </div>
         <div className="flex items-center gap-4 sm:gap-6 shrink-0">
           <div className="text-right">
             <div className="font-mono font-bold text-2xl leading-none">{jobs.length}</div>
-            <div className="text-[11px] text-ink-200">jobs</div>
+            <div className="text-[11px] text-ink-200">{t('board.jobs')}</div>
           </div>
           {urgentCount > 0 && (
             <div className="text-right">
               <div className="font-mono font-bold text-2xl leading-none text-press-light">{urgentCount}</div>
-              <div className="text-[11px] text-ink-200">urgent</div>
+              <div className="text-[11px] text-ink-200">{t('board.urgent')}</div>
             </div>
           )}
+          <BoardNotifications role={team} />
+          <LangToggle dark />
           <button onClick={signOut}
             className="bg-white/10 hover:bg-white/20 text-white text-sm font-semibold px-3 py-2 rounded-xl transition-colors">
-            Sign out
+            {t('common.signOut')}
           </button>
         </div>
       </header>
@@ -118,8 +124,8 @@ export default function TeamBoard({ team }) {
         ) : jobs.length === 0 ? (
           <div className="flex flex-col items-center justify-center text-center py-24">
             <div className="text-6xl mb-4 opacity-70">✅</div>
-            <div className="font-heading font-bold text-2xl text-ink mb-1">Nothing pending</div>
-            <div className="text-ink-300">New work will appear here automatically.</div>
+            <div className="font-heading font-bold text-2xl text-ink mb-1">{t('board.nothingPending')}</div>
+            <div className="text-ink-300">{t('board.workAppears')}</div>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
@@ -136,6 +142,9 @@ export default function TeamBoard({ team }) {
 }
 
 function Card({ job, today, cfg, busy, onAdvance }) {
+  const [expanded, setExpanded] = useState(false)
+  const { t } = useLang()
+
   const jobType = job.job_type === 'Other' ? job.custom_job_type : job.job_type
   const size = job.job_type === 'Flex' && (job.flex_width || job.flex_height)
     ? `${job.flex_width} × ${job.flex_height} ${job.flex_unit}`
@@ -158,42 +167,86 @@ function Card({ job, today, cfg, busy, onAdvance }) {
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.97 }}
       transition={{ duration: 0.18 }}
-      className={`bg-white rounded-2xl shadow-card overflow-hidden border-l-4 ${job.is_urgent ? 'border-press' : 'border-transparent'}`}
+      className={`bg-white rounded-2xl shadow-card overflow-hidden border-l-4 transition-shadow hover:shadow-cardHover
+        ${job.is_urgent ? 'border-press' : 'border-transparent'} ${expanded ? 'ring-2 ring-ink-500/20' : ''}`}
     >
       <div className="p-5">
-        <div className="flex items-start justify-between gap-2 mb-3">
-          <div className="font-mono text-sm text-ink-400">{job.job_id}</div>
-          <div className="flex items-center gap-2">
-            {job.is_urgent && <span className="pill bg-press text-white animate-pulse">⚡ URGENT</span>}
-            <span className={`pill ${STAGE_PILL[job.production_stage] || 'bg-ink-50 text-ink-400'}`}>{job.production_stage}</span>
+        {/* Tappable summary area */}
+        <div className="cursor-pointer select-none" onClick={() => setExpanded((v) => !v)}>
+          <div className="flex items-start justify-between gap-2 mb-3">
+            <div className="font-mono text-sm text-ink-400">{job.job_id}</div>
+            <div className="flex items-center gap-2">
+              {job.is_urgent && <span className="pill bg-press text-white animate-pulse">⚡ URGENT</span>}
+              <span className={`pill ${STAGE_PILL[job.production_stage] || 'bg-ink-50 text-ink-400'}`}>{t(`pstage.${job.production_stage}`)}</span>
+            </div>
+          </div>
+
+          <div className="font-heading font-bold text-xl text-ink leading-tight">{jobType}</div>
+          <div className="text-sm text-ink-400 mb-3">
+            {size ? <span>{size} · </span> : null}
+            <span className="font-mono">{t('field.quantity')} {job.quantity}</span>
+          </div>
+
+          {/* Always-visible quick line */}
+          <div className="flex items-center justify-between text-sm border-t border-ink-50 pt-3">
+            <span className="text-ink-300">{t('field.delivery')}</span>
+            <span className={`text-right ${dueCls}`}>{dueLabel}</span>
+          </div>
+
+          {/* Expandable detail */}
+          <AnimatePresence initial={false}>
+            {expanded && (
+              <motion.div
+                key="details"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.22, ease: 'easeOut' }}
+                className="overflow-hidden"
+              >
+                <div className="mt-3 space-y-2 text-[15px] bg-paper rounded-xl p-4">
+                  <DetailRow label={t('field.jobType')} value={jobType} />
+                  <DetailRow label={t('field.size')} value={size || '—'} />
+                  <DetailRow label={t('field.quantity')} value={job.quantity} mono />
+                  <DetailRow label={t('field.customer')} value={job.customer_name || '—'} />
+                  {job.customer_contact && <DetailRow label={t('field.phone')} value={job.customer_contact} mono />}
+                  <DetailRow label={t('field.delivery')} value={job.delivery_date ? formatDate(job.delivery_date) + timeSuffix : 'No date set'} valueCls={dueCls} />
+                  {job.assigned_to && <DetailRow label={t('field.assignedTo')} value={job.assigned_to} />}
+                  <DetailRow label={t('field.status')} value={t(`pstage.${job.production_stage}`)} />
+                  <DetailRow label={t('field.orderTaken')} value={formatDateTime(job.created_at)} />
+                  {job.notes && (
+                    <div className="pt-2 border-t border-ink-100">
+                      <div className="text-ink-300 text-sm mb-1">{t('field.notes')}</div>
+                      <div className="text-charcoal whitespace-pre-wrap">{job.notes}</div>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div className="mt-3 text-center text-[11px] font-semibold text-ink-300">
+            {expanded ? `${t('board.tapCollapse')} ▴` : `${t('board.tapDetails')} ▾`}
           </div>
         </div>
 
-        <div className="font-heading font-bold text-xl text-ink leading-tight">{jobType}</div>
-        <div className="text-sm text-ink-400 mb-3">
-          {size ? <span>{size} · </span> : null}
-          <span className="font-mono">Qty {job.quantity}</span>
-        </div>
-
-        <div className="space-y-1.5 text-sm border-t border-ink-50 pt-3 mb-4">
-          <div className="flex justify-between"><span className="text-ink-300">Customer</span><span className="text-charcoal font-medium">{job.customer_name || '—'}</span></div>
-          <div className="flex justify-between"><span className="text-ink-300">Delivery</span><span className={dueCls}>{dueLabel}</span></div>
-          {job.assigned_to && <div className="flex justify-between"><span className="text-ink-300">Assigned</span><span className="text-charcoal">{job.assigned_to}</span></div>}
-          {job.notes && (
-            <div className="pt-1">
-              <div className="text-ink-300 text-xs mb-0.5">Notes</div>
-              <div className="text-charcoal whitespace-pre-wrap text-[13px]">{job.notes}</div>
-            </div>
-          )}
-        </div>
-
+        {/* Action button (doesn't toggle the card) */}
         {btn && (
-          <button onClick={onAdvance} disabled={busy}
-            className={`${btn.cls} w-full text-white font-semibold py-3 rounded-xl transition-colors disabled:opacity-60`}>
-            {busy ? 'Saving…' : btn.label}
+          <button onClick={(e) => { e.stopPropagation(); onAdvance() }} disabled={busy}
+            className={`${btn.cls} w-full text-white font-semibold py-3 rounded-xl transition-colors disabled:opacity-60 mt-4`}>
+            {busy ? 'Saving…' : btn.action.startsWith('start') ? t('common.start') : t('common.finish')}
           </button>
         )}
       </div>
     </motion.div>
+  )
+}
+
+function DetailRow({ label, value, mono, valueCls = '' }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <span className="text-ink-300">{label}</span>
+      <span className={`text-charcoal font-semibold text-right ${mono ? 'font-mono' : ''} ${valueCls}`}>{value}</span>
+    </div>
   )
 }

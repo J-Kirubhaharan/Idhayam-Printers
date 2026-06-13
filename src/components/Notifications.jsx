@@ -7,6 +7,7 @@ import { todayIST, formatDate, formatTime12, deliveryDeadline } from '../lib/for
 
 const SEEN_KEY = 'idhayam_notif_seen'
 const READ_KEY = 'idhayam_notif_read'
+const DISMISS_KEY = 'idhayam_notif_dismissed'  // reminder keys the owner cleared
 const getArr = (k) => { try { return JSON.parse(localStorage.getItem(k) || '[]') } catch { return [] } }
 const setArr = (k, v) => localStorage.setItem(k, JSON.stringify(v))
 
@@ -50,10 +51,10 @@ export default function Notifications() {
           const hrs = (deadline - now) / 3600000
           if (hrs > 0 && hrs <= 5) {
             notes.push({
-              key: `time-${j.id}`, kind: 'time', big: true,
+              key: `time-${j.id}`, kind: 'time', big: true, hrs,
               icon: '⏰', title: `Finish in ${humanize(hrs)}`,
               detail: `${type} for ${who} · by ${formatTime12(j.delivery_time)}`,
-              jobId: j.job_id, to: '/jobs'
+              jobId: j.job_id, to: `/invoice/${j.id}`
             })
             continue
           }
@@ -66,7 +67,7 @@ export default function Notifications() {
           key: `due-${j.id}`, kind: 'due', icon: '📅',
           title: 'Deliver tomorrow',
           detail: `${type} for ${who} (${j.job_id})`,
-          jobId: j.job_id, to: '/jobs'
+          jobId: j.job_id, to: `/invoice/${j.id}`
         })
       }
 
@@ -78,7 +79,7 @@ export default function Notifications() {
             key: `ready-${j.id}`, kind: 'ready', icon: '📦',
             title: 'Waiting for pickup over a day',
             detail: `${type} for ${who} — please follow up`,
-            jobId: j.job_id, to: '/'
+            jobId: j.job_id, to: `/invoice/${j.id}`
           })
         }
       }
@@ -86,25 +87,37 @@ export default function Notifications() {
 
     // recent production activity (design / print team handoffs) — owner only
     const { data: acts } = await supabase
-      .from('activity_log').select('*').order('created_at', { ascending: false }).limit(30)
+      .from('activity_log').select('*').eq('target', 'owner').order('created_at', { ascending: false }).limit(30)
     for (const a of (acts || [])) {
       notes.push({
-        key: `act-${a.id}`, kind: 'activity',
+        key: `act-${a.id}`, kind: 'activity', id: a.id, ts: new Date(a.created_at).getTime(),
         icon: a.event.includes('finished') ? '✅' : a.event.includes('Design') ? '🎨' : '🖨',
         title: a.event,
         detail: `${a.job_code} · ${a.customer_name}`,
-        to: '/all-orders'
+        to: a.job_id ? `/invoice/${a.job_id}` : '/all-orders'
       })
     }
 
-    // order: activity (newest) → timed → due tomorrow → ready-stale
-    const rank = { activity: -1, time: 0, due: 1, ready: 2 }
-    notes.sort((a, b) => (rank[a.kind] ?? 9) - (rank[b.kind] ?? 9))
+    // order: urgent timed reminders first (soonest deadline), then newest activity,
+    // then due-tomorrow, then ready-stale
+    const rank = { time: 0, activity: 1, due: 2, ready: 3 }
+    notes.sort((a, b) => {
+      const r = (rank[a.kind] ?? 9) - (rank[b.kind] ?? 9)
+      if (r !== 0) return r
+      if (a.kind === 'time') return (a.hrs ?? 99) - (b.hrs ?? 99)
+      if (a.kind === 'activity') return (b.ts ?? 0) - (a.ts ?? 0)
+      return 0
+    })
+
+    // hide reminders the owner has dismissed; prune that list to live keys
+    const currentKeys = notes.map((n) => n.key)
+    const dismissed = getArr(DISMISS_KEY).filter((k) => currentKeys.includes(k))
+    setArr(DISMISS_KEY, dismissed)
+    const visible = notes.filter((n) => !dismissed.includes(n.key))
 
     // popups for newly-appeared notifications (deduped via localStorage)
     const seen = getArr(SEEN_KEY)
-    const currentKeys = notes.map((n) => n.key)
-    notes.forEach((n) => {
+    visible.forEach((n) => {
       if (!seen.includes(n.key) && n.kind !== 'activity') {
         if (n.big) {
           toast(`⏰ ${n.title} — ${n.detail}`, {
@@ -116,25 +129,35 @@ export default function Notifications() {
         }
       }
     })
-    setArr(SEEN_KEY, currentKeys) // prune to what's currently active
+    setArr(SEEN_KEY, visible.map((n) => n.key)) // prune to what's currently shown
 
-    setItems(notes)
+    setItems(visible)
   }
 
   useEffect(() => {
     compute()
     const id = setInterval(() => { tick.current++; compute() }, 60000)
+    // recompute right after a job is created/edited, and when returning to the tab
+    const refresh = () => compute()
+    window.addEventListener('idhayam:refresh-notifs', refresh)
+    window.addEventListener('focus', refresh)
     // live toast + refresh whenever a team starts/finishes a stage
     const ch = supabase
       .channel('owner_activity')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_log' }, (payload) => {
         const a = payload.new
+        if (a.target !== 'owner') return
         const icon = a.event.includes('finished') ? '✅' : a.event.includes('Design') ? '🎨' : '🖨'
         toast(`${icon} ${a.job_code} · ${a.customer_name} — ${a.event}`, { duration: 7000 })
         compute()
       })
       .subscribe()
-    return () => { clearInterval(id); supabase.removeChannel(ch) }
+    return () => {
+      clearInterval(id)
+      window.removeEventListener('idhayam:refresh-notifs', refresh)
+      window.removeEventListener('focus', refresh)
+      supabase.removeChannel(ch)
+    }
   }, [])
 
   const unread = useMemo(() => items.filter((n) => !readKeys.includes(n.key)).length, [items, readKeys])
@@ -149,6 +172,18 @@ export default function Notifications() {
   }
 
   const go = (n) => { setOpen(false); navigate(n.to) }
+
+  // dismiss any notification: activity events are deleted from the DB; reminders
+  // are remembered locally so they stay cleared until they next become relevant.
+  const dismiss = async (n) => {
+    setItems((cur) => cur.filter((x) => x.key !== n.key))
+    if (n.kind === 'activity' && n.id) {
+      await supabase.from('activity_log').delete().eq('id', n.id)
+    } else {
+      const next = [...getArr(DISMISS_KEY), n.key]
+      setArr(DISMISS_KEY, next)
+    }
+  }
 
   return (
     <div className="relative">
@@ -186,14 +221,17 @@ export default function Notifications() {
                   </div>
                 ) : (
                   items.map((n) => (
-                    <button key={n.key} onClick={() => go(n)}
-                      className="w-full text-left px-4 py-3 hover:bg-ink-50/50 transition-colors flex gap-3">
-                      <span className="text-lg leading-none mt-0.5">{n.icon}</span>
-                      <span className="min-w-0">
-                        <span className={`block text-sm font-semibold ${n.kind === 'time' ? 'text-press' : 'text-charcoal'}`}>{n.title}</span>
-                        <span className="block text-xs text-ink-300">{n.detail}</span>
-                      </span>
-                    </button>
+                    <div key={n.key} className="flex items-start hover:bg-ink-50/50 transition-colors">
+                      <button onClick={() => go(n)} className="flex-1 text-left px-4 py-3 flex gap-3 min-w-0">
+                        <span className="text-lg leading-none mt-0.5">{n.icon}</span>
+                        <span className="min-w-0">
+                          <span className={`block text-sm font-semibold ${n.kind === 'time' ? 'text-press' : 'text-charcoal'}`}>{n.title}</span>
+                          <span className="block text-xs text-ink-300">{n.detail}</span>
+                        </span>
+                      </button>
+                      <button onClick={() => dismiss(n)} title="Dismiss"
+                        className="shrink-0 w-6 h-6 mt-3 mr-3 rounded-full text-ink-300 hover:bg-ink-100 hover:text-press flex items-center justify-center leading-none">✕</button>
+                    </div>
                   ))
                 )}
               </div>
