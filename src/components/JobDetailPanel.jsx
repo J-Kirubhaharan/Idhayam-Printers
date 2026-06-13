@@ -191,6 +191,15 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
         .update({ deleted_at: new Date().toISOString() })
         .eq('id', job.id)
       if (error) throw error
+
+      // if this was the customer's only live job, remove the now-empty customer
+      if (job.customer_id) {
+        const { count } = await supabase
+          .from('jobs').select('id', { count: 'exact', head: true })
+          .eq('customer_id', job.customer_id).is('deleted_at', null)
+        if (count === 0) await supabase.from('customers').delete().eq('id', job.customer_id)
+      }
+
       toast.success(`${job.job_id} moved to Deleted Jobs`)
       setConfirmDelete(false)
       onChanged?.()

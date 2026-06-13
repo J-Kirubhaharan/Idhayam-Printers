@@ -5,6 +5,7 @@ import Sidebar from './Sidebar'
 import Clock from './Clock'
 import Notifications from './Notifications'
 import LangToggle from './LangToggle'
+import Calculator from './Calculator'
 import { supabase } from '../lib/supabase'
 import { useLang } from '../context/LanguageContext'
 
@@ -20,6 +21,7 @@ export default function Layout() {
             <ActiveCounter />
           </div>
           <div className="absolute right-4 top-16 lg:top-6 flex items-center gap-2">
+            <Calculator />
             <LangToggle />
             <Notifications />
           </div>

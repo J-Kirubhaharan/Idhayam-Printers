@@ -18,8 +18,13 @@ const DRAFT_KEY = 'idhayam_newjob_draft'
 
 const emptyItem = () => ({
   jobType: '', customJobType: '', paperSize: '', customPaperSize: '',
-  flexWidth: '', flexHeight: '', flexUnit: 'ft', quantity: '', rate: ''
+  flexWidth: '', flexHeight: '', flexUnit: 'ft', quantity: '', rate: '',
+  needsDesign: true, needsPrinting: true
 })
+
+// where a job enters the production pipeline, based on which stages it needs
+const startStage = (needsDesign, needsPrinting) =>
+  needsDesign ? 'Design Queue' : needsPrinting ? 'Print Queue' : 'None'
 
 const emptyForm = {
   customerName: '',
@@ -259,6 +264,9 @@ export default function NewJob() {
           total_amount: lineTotal(it),
           is_urgent: form.isUrgent,
           assigned_to: form.assignedTo.trim() || null,
+          needs_design: it.needsDesign,
+          needs_printing: it.needsPrinting,
+          production_stage: startStage(it.needsDesign, it.needsPrinting),
           payment_type: form.paymentType,
           status: 'Pending',
           delivery_date: form.deliveryDate || null,
@@ -459,6 +467,22 @@ export default function NewJob() {
                       <input type="number" className="input font-mono" value={it.rate}
                         onChange={(e) => setItem(i, 'rate', e.target.value)} />
                     </div>
+                  </div>
+
+                  {/* Production stages this item needs (drives the Design / Print boards) */}
+                  <div>
+                    <label className="label">Work needed</label>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setItem(i, 'needsDesign', !it.needsDesign)}
+                        className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-colors ${it.needsDesign ? 'bg-press text-white border-press' : 'bg-white text-ink-300 border-ink-100 hover:bg-ink-50'}`}>
+                        {it.needsDesign ? '✓ ' : ''}Design
+                      </button>
+                      <button type="button" onClick={() => setItem(i, 'needsPrinting', !it.needsPrinting)}
+                        className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-colors ${it.needsPrinting ? 'bg-ink text-white border-ink' : 'bg-white text-ink-300 border-ink-100 hover:bg-ink-50'}`}>
+                        {it.needsPrinting ? '✓ ' : ''}Printing
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-ink-300 mt-1">Turn off a stage this item doesn't need (e.g. printing-only or design-only).</p>
                   </div>
 
                   <div className="flex items-center justify-between text-sm">

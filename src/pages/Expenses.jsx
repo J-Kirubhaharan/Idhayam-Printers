@@ -8,7 +8,7 @@ import { Skeleton, SkeletonCard } from '../components/Skeleton'
 import EmptyState from '../components/EmptyState'
 import ConfirmDialog from '../components/ConfirmDialog'
 
-const CATEGORIES = ['Ink', 'Paper', 'Electricity', 'Rent', 'Maintenance', 'Salary', 'Other']
+const CATEGORIES = ['Tea/Snacks', 'Courier', 'Bus Parcel', 'Diesel/Petrol', 'Ink', 'Paper', 'Electricity', 'Maintenance', 'Salary', 'Other']
 
 export default function Expenses() {
   const [loading, setLoading] = useState(true)
@@ -16,7 +16,7 @@ export default function Expenses() {
   const [busy, setBusy] = useState(false)
   const [toDelete, setToDelete] = useState(null)
 
-  const [category, setCategory] = useState('Ink')
+  const [category, setCategory] = useState('Tea/Snacks')
   const [customCategory, setCustomCategory] = useState('')
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')

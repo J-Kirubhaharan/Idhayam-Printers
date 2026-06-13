@@ -84,15 +84,28 @@ export default function Notifications() {
       }
     }
 
-    // order: timed → due tomorrow → ready-stale
-    const rank = { time: 0, due: 1, ready: 2 }
-    notes.sort((a, b) => rank[a.kind] - rank[b.kind])
+    // recent production activity (design / print team handoffs) — owner only
+    const { data: acts } = await supabase
+      .from('activity_log').select('*').order('created_at', { ascending: false }).limit(30)
+    for (const a of (acts || [])) {
+      notes.push({
+        key: `act-${a.id}`, kind: 'activity',
+        icon: a.event.includes('finished') ? '✅' : a.event.includes('Design') ? '🎨' : '🖨',
+        title: a.event,
+        detail: `${a.job_code} · ${a.customer_name}`,
+        to: '/all-orders'
+      })
+    }
+
+    // order: activity (newest) → timed → due tomorrow → ready-stale
+    const rank = { activity: -1, time: 0, due: 1, ready: 2 }
+    notes.sort((a, b) => (rank[a.kind] ?? 9) - (rank[b.kind] ?? 9))
 
     // popups for newly-appeared notifications (deduped via localStorage)
     const seen = getArr(SEEN_KEY)
     const currentKeys = notes.map((n) => n.key)
     notes.forEach((n) => {
-      if (!seen.includes(n.key)) {
+      if (!seen.includes(n.key) && n.kind !== 'activity') {
         if (n.big) {
           toast(`⏰ ${n.title} — ${n.detail}`, {
             duration: 12000,
@@ -111,7 +124,17 @@ export default function Notifications() {
   useEffect(() => {
     compute()
     const id = setInterval(() => { tick.current++; compute() }, 60000)
-    return () => clearInterval(id)
+    // live toast + refresh whenever a team starts/finishes a stage
+    const ch = supabase
+      .channel('owner_activity')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_log' }, (payload) => {
+        const a = payload.new
+        const icon = a.event.includes('finished') ? '✅' : a.event.includes('Design') ? '🎨' : '🖨'
+        toast(`${icon} ${a.job_code} · ${a.customer_name} — ${a.event}`, { duration: 7000 })
+        compute()
+      })
+      .subscribe()
+    return () => { clearInterval(id); supabase.removeChannel(ch) }
   }, [])
 
   const unread = useMemo(() => items.filter((n) => !readKeys.includes(n.key)).length, [items, readKeys])

@@ -21,11 +21,13 @@ import Reports from './pages/Reports'
 import Quotation from './pages/Quotation'
 import EmployeeBoard from './pages/EmployeeBoard'
 import OwnerBoard from './pages/OwnerBoard'
+import DesignBoard from './pages/DesignBoard'
+import PrintBoard from './pages/PrintBoard'
 
 export default function App() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { isEmployee } = useAuth()
+  const { isEmployee, isDesign, isPrint } = useAuth()
 
   // Global keyboard shortcuts (owner only): N = new job, E = existing jobs
   useEffect(() => {
@@ -50,6 +52,16 @@ export default function App() {
             <>
               <Route path="/board" element={<EmployeeBoard />} />
               <Route path="*" element={<Navigate to="/board" replace />} />
+            </>
+          ) : isDesign ? (
+            <>
+              <Route path="/design-board" element={<DesignBoard />} />
+              <Route path="*" element={<Navigate to="/design-board" replace />} />
+            </>
+          ) : isPrint ? (
+            <>
+              <Route path="/print-board" element={<PrintBoard />} />
+              <Route path="*" element={<Navigate to="/print-board" replace />} />
             </>
           ) : (
             <Route element={<Layout />}>

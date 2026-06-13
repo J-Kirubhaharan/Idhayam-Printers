@@ -41,6 +41,8 @@ export function AuthProvider({ children }) {
       user: session?.user ?? null,
       role,
       isEmployee: role === 'employee',
+      isDesign: role === 'design',
+      isPrint: role === 'print',
       loading,
       signIn,
       signOut

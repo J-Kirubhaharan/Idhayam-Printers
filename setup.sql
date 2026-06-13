@@ -114,6 +114,20 @@ alter table jobs add column if not exists delivery_time text;
 alter table jobs add column if not exists ready_at timestamptz;
 update jobs set ready_at = updated_at where status = 'Ready for Pickup' and ready_at is null;
 
+-- Production pipeline: which stages a job needs, and where it currently sits.
+-- Stages flow: Design Queue -> Designing -> Print Queue -> Printing -> Done.
+-- 'None' = a job that needs neither design nor printing (skips the pipeline).
+alter table jobs add column if not exists needs_design boolean not null default true;
+alter table jobs add column if not exists needs_printing boolean not null default true;
+alter table jobs add column if not exists production_stage text;
+alter table jobs drop constraint if exists jobs_stage_check;
+alter table jobs add constraint jobs_stage_check check (
+  production_stage is null or production_stage in
+  ('Design Queue','Designing','Print Queue','Printing','Done','None')
+);
+-- existing rows predate the pipeline -> keep them out of the team queues
+update jobs set production_stage = 'None' where production_stage is null;
+
 -- Auto-update updated_at, and stamp/clear delivered_at on status change
 create or replace function set_updated_at()
 returns trigger as $$
@@ -294,9 +308,14 @@ where j.payment_type in ('Cash','UPI')
 -- ============================================================
 create table if not exists profiles (
   id uuid primary key references auth.users(id) on delete cascade,
-  role text not null default 'owner' check (role in ('owner','employee')),
+  role text not null default 'owner' check (role in ('owner','employee','design','print')),
   created_at timestamptz default now()
 );
+
+-- widen the role list for existing databases (design + print teams)
+alter table profiles drop constraint if exists profiles_role_check;
+alter table profiles add constraint profiles_role_check
+  check (role in ('owner','employee','design','print'));
 
 alter table profiles enable row level security;
 drop policy if exists "profiles_read_own" on profiles;
@@ -372,12 +391,18 @@ create table if not exists job_board (
   is_urgent boolean default false,
   assigned_to text,
   notes text,
-  created_at timestamptz
+  created_at timestamptz,
+  production_stage text,
+  needs_design boolean,
+  needs_printing boolean
 );
 
 create index if not exists idx_job_board_delivery on job_board (delivery_date);
 alter table job_board add column if not exists assigned_to text;
 alter table job_board add column if not exists delivery_time text;
+alter table job_board add column if not exists production_stage text;
+alter table job_board add column if not exists needs_design boolean;
+alter table job_board add column if not exists needs_printing boolean;
 
 alter table job_board enable row level security;
 drop policy if exists "job_board_read" on job_board;
@@ -402,11 +427,13 @@ begin
     insert into job_board (
       id, job_id, customer_name, customer_contact, job_type, custom_job_type,
       paper_size, custom_paper_size, flex_width, flex_height, flex_unit,
-      quantity, status, delivery_date, delivery_time, is_urgent, assigned_to, notes, created_at
+      quantity, status, delivery_date, delivery_time, is_urgent, assigned_to, notes, created_at,
+      production_stage, needs_design, needs_printing
     ) values (
       new.id, new.job_id, cust.name, cust.contact, new.job_type, new.custom_job_type,
       new.paper_size, new.custom_paper_size, new.flex_width, new.flex_height, new.flex_unit,
-      new.quantity, new.status, new.delivery_date, new.delivery_time, new.is_urgent, new.assigned_to, new.notes, new.created_at
+      new.quantity, new.status, new.delivery_date, new.delivery_time, new.is_urgent, new.assigned_to, new.notes, new.created_at,
+      new.production_stage, new.needs_design, new.needs_printing
     )
     on conflict (id) do update set
       job_id = excluded.job_id,
@@ -426,7 +453,10 @@ begin
       is_urgent = excluded.is_urgent,
       assigned_to = excluded.assigned_to,
       notes = excluded.notes,
-      created_at = excluded.created_at;
+      created_at = excluded.created_at,
+      production_stage = excluded.production_stage,
+      needs_design = excluded.needs_design,
+      needs_printing = excluded.needs_printing;
   else
     delete from job_board where id = new.id;  -- ready/delivered/deleted -> clear from board
   end if;
@@ -459,11 +489,13 @@ for each row execute function sync_job_board_customer();
 insert into job_board (
   id, job_id, customer_name, customer_contact, job_type, custom_job_type,
   paper_size, custom_paper_size, flex_width, flex_height, flex_unit,
-  quantity, status, delivery_date, delivery_time, is_urgent, assigned_to, notes, created_at
+  quantity, status, delivery_date, delivery_time, is_urgent, assigned_to, notes, created_at,
+  production_stage, needs_design, needs_printing
 )
 select j.id, j.job_id, c.name, c.contact, j.job_type, j.custom_job_type,
        j.paper_size, j.custom_paper_size, j.flex_width, j.flex_height, j.flex_unit,
-       j.quantity, j.status, j.delivery_date, j.delivery_time, j.is_urgent, j.assigned_to, j.notes, j.created_at
+       j.quantity, j.status, j.delivery_date, j.delivery_time, j.is_urgent, j.assigned_to, j.notes, j.created_at,
+       j.production_stage, j.needs_design, j.needs_printing
 from jobs j left join customers c on c.id = j.customer_id
 where j.deleted_at is null and j.status in ('Pending', 'In Progress')
 on conflict (id) do nothing;
@@ -483,11 +515,95 @@ begin
 end$$;
 
 -- ============================================================
+-- 12. PRODUCTION ACTIVITY LOG + STAGE-ADVANCE FUNCTION
+--     Teams move a job through Design -> Print via a single secure
+--     function (they never touch the jobs table directly, so money
+--     stays protected). Each move records a row the owner sees live.
+-- ============================================================
+create table if not exists activity_log (
+  id uuid primary key default uuid_generate_v4(),
+  job_id uuid,
+  job_code text,        -- the display Job ID (IPO-...)
+  customer_name text,
+  event text,           -- 'Design started', 'Design finished', etc.
+  actor text,           -- which team did it ('design' / 'print')
+  created_at timestamptz default now()
+);
+create index if not exists idx_activity_created on activity_log (created_at desc);
+
+alter table activity_log enable row level security;
+drop policy if exists "activity_owner_read" on activity_log;
+create policy "activity_owner_read" on activity_log
+  for select to authenticated using (is_owner());
+
+-- The only way teams change a job's stage. SECURITY DEFINER so design/print
+-- logins need no write access to jobs. Validates role, advances the stage,
+-- and logs the event for the owner's notification bell.
+create or replace function advance_production(p_job uuid, p_action text)
+returns text as $$
+declare
+  r text;
+  j jobs%rowtype;
+  cust_name text;
+  new_stage text;
+  evt text;
+begin
+  select role into r from profiles where id = auth.uid();
+  if r is null or r not in ('design','print','owner') then
+    raise exception 'Not allowed';
+  end if;
+
+  select * into j from jobs where id = p_job and deleted_at is null;
+  if not found then raise exception 'Job not found'; end if;
+
+  if p_action = 'start_design' and j.production_stage = 'Design Queue' then
+    new_stage := 'Designing'; evt := 'Design started';
+  elsif p_action = 'finish_design' and j.production_stage = 'Designing' then
+    new_stage := case when j.needs_printing then 'Print Queue' else 'Done' end;
+    evt := 'Design finished';
+  elsif p_action = 'start_print' and j.production_stage = 'Print Queue' then
+    new_stage := 'Printing'; evt := 'Printing started';
+  elsif p_action = 'finish_print' and j.production_stage = 'Printing' then
+    new_stage := 'Done'; evt := 'Printing finished';
+  else
+    raise exception 'Invalid action % for stage %', p_action, j.production_stage;
+  end if;
+
+  update jobs set production_stage = new_stage where id = p_job;
+
+  select name into cust_name from customers where id = j.customer_id;
+  insert into activity_log (job_id, job_code, customer_name, event, actor)
+    values (p_job, j.job_id, coalesce(cust_name, '-'), evt, r);
+
+  return new_stage;
+end;
+$$ language plpgsql security definer;
+
+-- realtime so the owner's bell lights up the instant a team acts
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and tablename = 'activity_log'
+  ) then
+    alter publication supabase_realtime add table activity_log;
+  end if;
+end$$;
+
+-- ============================================================
 -- DONE. Logins (Authentication -> Users -> Add User):
 --   1. Owner login (already created) — full access.
---   2. Employee login (shared on shop computers). After creating it, run
---      this (creates the profile row AND sets the role in one go):
+--   2. Employee login (shared on shop computers, view-only board). After
+--      creating it, run:
 --        insert into profiles (id, role)
 --          select id, 'employee' from auth.users where email = 'EMPLOYEE_EMAIL_HERE'
 --        on conflict (id) do update set role = 'employee';
+--   3. Design team login (ground floor). After creating design@idhayam.shop:
+--        insert into profiles (id, role)
+--          select id, 'design' from auth.users where email = 'design@idhayam.shop'
+--        on conflict (id) do update set role = 'design';
+--   4. Print team login (second floor). After creating print@idhayam.shop:
+--        insert into profiles (id, role)
+--          select id, 'print' from auth.users where email = 'print@idhayam.shop'
+--        on conflict (id) do update set role = 'print';
 -- ============================================================
