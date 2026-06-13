@@ -15,6 +15,7 @@ const links = [
   { to: '/customers', key: 'nav.customers', icon: '○' },
   { to: '/credit', key: 'nav.credit', icon: '₹' },
   { to: '/expenses', key: 'nav.expenses', icon: '−' },
+  { to: '/add-old-record', key: 'nav.addOldRecord', icon: '🕘' },
   { to: '/daily-summary', key: 'nav.dailySummary', icon: '◐' },
   { to: '/all-orders', key: 'nav.allOrders', icon: '📒' },
   { to: '/reports', key: 'nav.reports', icon: '▲' }

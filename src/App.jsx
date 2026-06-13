@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard'
 import NewJob from './pages/NewJob'
 import ExistingJobs from './pages/ExistingJobs'
 import AllOrders from './pages/AllOrders'
+import AddOldRecord from './pages/AddOldRecord'
 import CompletedJobs from './pages/CompletedJobs'
 import DeletedJobs from './pages/DeletedJobs'
 import Invoice from './pages/Invoice'
@@ -67,6 +68,7 @@ export default function App() {
             <Route element={<Layout />}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/new-job" element={<NewJob />} />
+              <Route path="/add-old-record" element={<AddOldRecord />} />
               <Route path="/quotation" element={<Quotation />} />
               <Route path="/jobs" element={<ExistingJobs />} />
               <Route path="/completed-jobs" element={<CompletedJobs />} />

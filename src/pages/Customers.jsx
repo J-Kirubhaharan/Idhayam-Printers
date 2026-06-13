@@ -15,6 +15,12 @@ export default function Customers() {
   const [selected, setSelected] = useState(null)
   const [jobs, setJobs] = useState([])
   const [jobsLoading, setJobsLoading] = useState(false)
+  // change-number editor
+  const [numEdit, setNumEdit] = useState(false)
+  const [numVal, setNumVal] = useState('')
+  const [numWarn, setNumWarn] = useState('')
+  const [numArm, setNumArm] = useState('')   // a number value the user has confirmed despite a clash
+  const [numBusy, setNumBusy] = useState(false)
 
   useEffect(() => { load() }, [])
 
@@ -27,11 +33,38 @@ export default function Customers() {
 
   const openCustomer = async (c) => {
     setSelected(c)
+    setNumEdit(false); setNumWarn(''); setNumArm(''); setNumVal(c.contact || '')
     setJobsLoading(true)
     const { data } = await supabase
       .from('jobs').select('*').eq('customer_id', c.id).is('deleted_at', null).order('created_at', { ascending: false })
     setJobs(data || [])
     setJobsLoading(false)
+  }
+
+  // update the customer's primary number on their existing record (keeps all
+  // history & dues attached — see the New Job same-person prompt)
+  const saveNumber = async () => {
+    const v = numVal.trim()
+    if (!v) { return setNumWarn('Enter a number, or leave it as is.') }
+    if (v === (selected.contact || '')) { return setNumEdit(false) }
+    setNumBusy(true)
+    // warn (once) if this number already belongs to a different customer
+    if (numArm !== v) {
+      const { data: clash } = await supabase
+        .from('customers').select('id,name').eq('contact', v).neq('id', selected.id).limit(1)
+      if (clash?.length) {
+        setNumWarn(`This number already belongs to "${clash[0].name}". Tap Update again to change it anyway.`)
+        setNumArm(v)        // next tap with the same number proceeds
+        setNumBusy(false)
+        return
+      }
+    }
+    const { error } = await supabase.from('customers').update({ contact: v }).eq('id', selected.id)
+    setNumBusy(false)
+    if (error) { setNumWarn(error.message); return }
+    setSelected((s) => ({ ...s, contact: v }))
+    setCustomers((cs) => cs.map((c) => (c.id === selected.id ? { ...c, contact: v } : c)))
+    setNumEdit(false); setNumWarn(''); setNumArm('')
   }
 
   const filtered = useMemo(() => {
@@ -109,12 +142,33 @@ export default function Customers() {
               transition={{ type: 'spring', damping: 28, stiffness: 280 }}
               onClick={(e) => e.stopPropagation()}>
               <div className="bg-ink text-white px-5 py-4 flex items-start justify-between">
-                <div>
+                <div className="min-w-0">
                   <div className="font-heading font-bold text-lg leading-tight">{selected.name}</div>
                   {selected.place && <div className="text-[11px] text-ink-100">{selected.place}</div>}
-                  <div className="text-[11px] text-ink-200 font-mono">{selected.contact || 'No contact'}</div>
+                  {numEdit ? (
+                    <div className="mt-2 space-y-2">
+                      <input className="w-full rounded-lg px-3 py-1.5 text-sm font-mono text-charcoal"
+                        placeholder="New number" value={numVal} inputMode="numeric" autoFocus
+                        onChange={(e) => { setNumVal(e.target.value); setNumArm(''); setNumWarn('') }} />
+                      {numWarn && <div className="text-[11px] text-amber-300">{numWarn}</div>}
+                      <div className="flex gap-2">
+                        <button onClick={saveNumber} disabled={numBusy}
+                          className="bg-press hover:bg-press-dark text-white text-xs font-semibold px-3 py-1.5 rounded-lg">
+                          {numBusy ? 'Saving…' : 'Update'}
+                        </button>
+                        <button onClick={() => { setNumEdit(false); setNumWarn(''); setNumArm(''); setNumVal(selected.contact || '') }}
+                          className="text-ink-100 hover:text-white text-xs font-semibold px-3 py-1.5">Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[11px] text-ink-200 font-mono">{selected.contact || 'No contact'}</span>
+                      <button onClick={() => { setNumEdit(true); setNumVal(selected.contact || '') }}
+                        className="text-[11px] text-ink-100 hover:text-white underline underline-offset-2">✎ Change number</button>
+                    </div>
+                  )}
                 </div>
-                <button onClick={() => setSelected(null)} className="text-xl leading-none text-ink-100 hover:text-white">✕</button>
+                <button onClick={() => setSelected(null)} className="text-xl leading-none text-ink-100 hover:text-white shrink-0">✕</button>
               </div>
 
               <div className="flex-1 overflow-y-auto p-5 space-y-5">

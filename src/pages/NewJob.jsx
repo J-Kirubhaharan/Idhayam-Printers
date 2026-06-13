@@ -55,6 +55,10 @@ export default function NewJob() {
   const [showSuggest, setShowSuggest] = useState(false)
   const [busy, setBusy] = useState(false)
   const restored = useRef(false)
+  // how the customer was resolved (set when leaving step 1): { customerId: <id|'new'>, updateContactTo?: phone }
+  const [resolution, setResolution] = useState(null)
+  // a pending same-person / different-person question to ask before continuing
+  const [pending, setPending] = useState(null)
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
   const setItem = (i, k, v) => setForm((f) => ({ ...f, items: f.items.map((it, idx) => idx === i ? { ...it, [k]: v } : it) }))
@@ -132,6 +136,9 @@ export default function NewJob() {
     return () => clearTimeout(id)
   }, [form])
 
+  // any edit to the name or number invalidates an earlier same-person decision
+  useEffect(() => { setResolution(null) }, [form.customerName, form.whatsapp])
+
   const total = useMemo(() => form.items.reduce((s, it) => s + lineTotal(it), 0), [form.items])
   // Cash/UPI = fully paid. Credit = pay an advance now, the rest becomes pending.
   const isCredit = form.paymentType === 'Credit'
@@ -163,7 +170,50 @@ export default function NewJob() {
     return true
   }
 
-  const next = () => { if (validateStep(step)) setStep((s) => Math.min(3, s + 1)) }
+  // Figure out who this customer is. Phone number is the identity; name is a fallback.
+  // Returns either { resolution } (proceed silently) or { prompt } (ask same-person?).
+  const resolveCustomer = () => {
+    const name = form.customerName.trim()
+    const phone = form.whatsapp.trim()
+    const lc = name.toLowerCase()
+    const byName = customers.filter((c) => (c.name || '').trim().toLowerCase() === lc)
+    const byPhone = phone ? customers.filter((c) => c.contact === phone || c.alt_contact === phone) : []
+
+    if (phone) {
+      if (byPhone.length) {
+        const owner = byPhone[0]
+        // Case 3 — name AND number match the same person → silent
+        if ((owner.name || '').trim().toLowerCase() === lc) return { resolution: { customerId: owner.id } }
+        // Case 2 — this number already belongs to someone with a different name
+        return { prompt: { kind: 'phoneOther', owner, name, phone } }
+      }
+      // Case 1 — name is known but the number is new
+      if (byName.length) return { prompt: { kind: 'nameNewNumber', matches: byName, name, phone } }
+      // Case 4 — brand new
+      return { resolution: { customerId: 'new' } }
+    }
+    // no number entered
+    // Case 5 — existing name(s), no number → must ask which one
+    if (byName.length) return { prompt: { kind: 'nameNoNumber', matches: byName, name } }
+    // Case 4 — brand new
+    return { resolution: { customerId: 'new' } }
+  }
+
+  // user answered the same-person question
+  const choose = (res) => { setResolution(res); setPending(null); setStep(2) }
+
+  const next = () => {
+    if (step === 1) {
+      if (!validateStep(1)) return
+      if (resolution) { setStep(2); return }      // already decided this entry
+      const r = resolveCustomer()
+      if (r.prompt) { setPending(r.prompt); return }  // ask first, don't advance
+      setResolution(r.resolution)
+      setStep(2)
+      return
+    }
+    if (validateStep(step)) setStep((s) => Math.min(3, s + 1))
+  }
   const back = () => setStep((s) => Math.max(1, s - 1))
 
   const bumpJobType = async (name, isCustom) => {
@@ -184,41 +234,31 @@ export default function NewJob() {
     }
     setBusy(true)
     try {
-      // 1. Identify the customer by PHONE NUMBER (the unique key — two people can
-      //    share a name but not a number). Only fall back to name when no number
-      //    is given (a walk-in with no contact).
-      let customerId = null
+      // 1. Resolve the customer using the decision captured when leaving step 1
+      //    (phone is the identity; the same-person prompt handled any collision).
       const name = form.customerName.trim()
       const phone = form.whatsapp.trim()
       const altPhone = form.additionalContact.trim()
       const place = form.place.trim()
 
-      let existing = null
-      if (phone) {
-        // match a saved customer whose primary or alternate number is this phone
-        const { data } = await supabase
-          .from('customers').select('id,name,contact,alt_contact,place')
-          .or(`contact.eq.${phone},alt_contact.eq.${phone}`).limit(1)
-        existing = data?.[0] || null
-      } else {
-        // no number — match other no-number customers by name AND place (so two
-        // same-name walk-ins from different places stay separate)
-        let q = supabase
-          .from('customers').select('id,name,contact,alt_contact,place')
-          .ilike('name', name).is('contact', null)
-        q = place ? q.ilike('place', place) : q.is('place', null)
-        const { data } = await q.limit(1)
-        existing = data?.[0] || null
+      let res = resolution
+      if (!res) {
+        // fallback (shouldn't normally happen — step 1 always decides this)
+        const r = resolveCustomer()
+        res = r.resolution || { customerId: r.prompt?.owner?.id || r.prompt?.matches?.[0]?.id || 'new' }
       }
 
-      if (existing) {
-        customerId = existing.id
-        // fill in any blank fields, but never overwrite existing info
+      let customerId
+      if (res.customerId && res.customerId !== 'new') {
+        customerId = res.customerId
+        const ex = customers.find((c) => c.id === customerId) || {}
         const patch = {}
-        if (phone && !existing.contact) patch.contact = phone
-        if (altPhone && !existing.alt_contact) patch.alt_contact = altPhone
-        if (place && !existing.place) patch.place = place
+        if (res.updateContactTo) patch.contact = res.updateContactTo   // "same person — new number"
+        else if (phone && !ex.contact) patch.contact = phone           // fill a blank number
+        if (altPhone && !ex.alt_contact) patch.alt_contact = altPhone
+        if (place && !ex.place) patch.place = place
         if (Object.keys(patch).length) await supabase.from('customers').update(patch).eq('id', customerId)
+        if (res.updateContactTo) toast.success(`${ex.name || 'Customer'}'s number updated`)
       } else {
         const { data: created, error: cErr } = await supabase
           .from('customers')
@@ -649,7 +689,106 @@ export default function NewJob() {
           )}
         </div>
       </div>
+
+      {/* Same-person / different-person prompt (shown only when there's an ambiguity) */}
+      <AnimatePresence>
+        {pending && (
+          <motion.div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setPending(null)}>
+            <motion.div
+              className="bg-paper w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-panel overflow-hidden"
+              initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}>
+              <div className="bg-ink text-white px-5 py-4">
+                <div className="font-heading font-bold text-lg leading-tight">
+                  {pending.kind === 'phoneOther' ? 'Number already in use'
+                    : pending.kind === 'nameNewNumber' ? 'Same customer, new number?'
+                    : 'Which customer is this?'}
+                </div>
+              </div>
+
+              <div className="p-5 space-y-3">
+                <p className="text-sm text-ink-300">
+                  {pending.kind === 'phoneOther' && (
+                    <>The number <span className="font-mono text-charcoal">{pending.phone}</span> already belongs to <span className="font-semibold text-charcoal">{pending.owner.name}</span>{pending.owner.place ? ` · ${pending.owner.place}` : ''}.</>
+                  )}
+                  {pending.kind === 'nameNewNumber' && (
+                    <>You entered the number <span className="font-mono text-charcoal">{pending.phone}</span> for <span className="font-semibold text-charcoal">"{pending.name}"</span>, but that doesn't match the saved number.</>
+                  )}
+                  {pending.kind === 'nameNoNumber' && (
+                    <>There's already a customer named <span className="font-semibold text-charcoal">"{pending.name}"</span> and no number was entered. Who is this?</>
+                  )}
+                </p>
+
+                {/* Case 2 — number belongs to someone else */}
+                {pending.kind === 'phoneOther' && (
+                  <>
+                    <ChoiceBtn primary
+                      onClick={() => choose({ customerId: pending.owner.id })}
+                      title={`Same person — add this job to ${pending.owner.name}`}
+                      sub="Keeps all their history & dues together" />
+                    <ChoiceBtn
+                      onClick={() => choose({ customerId: 'new' })}
+                      title={`Different person sharing this number`}
+                      sub={`Create a new customer "${pending.name}"`} />
+                  </>
+                )}
+
+                {/* Case 1 — known name, new number */}
+                {pending.kind === 'nameNewNumber' && (
+                  <>
+                    {pending.matches.map((m) => (
+                      <ChoiceBtn key={m.id} primary
+                        onClick={() => choose({ customerId: m.id, updateContactTo: pending.phone })}
+                        title={`Same person — update ${m.name}'s number`}
+                        sub={`${m.place ? m.place + ' · ' : ''}old: ${m.contact || '—'} → new: ${pending.phone}`} />
+                    ))}
+                    <ChoiceBtn
+                      onClick={() => choose({ customerId: 'new' })}
+                      title="Different person"
+                      sub={`Create a new customer "${pending.name}"`} />
+                  </>
+                )}
+
+                {/* Case 5 — existing name(s), no number */}
+                {pending.kind === 'nameNoNumber' && (
+                  <>
+                    {pending.matches.map((m) => (
+                      <ChoiceBtn key={m.id} primary
+                        onClick={() => choose({ customerId: m.id })}
+                        title={`This is ${m.name}`}
+                        sub={`${m.place ? m.place + ' · ' : ''}${m.contact || 'no number'}`} />
+                    ))}
+                    <ChoiceBtn
+                      onClick={() => choose({ customerId: 'new' })}
+                      title="None of these"
+                      sub={`Create a new customer "${pending.name}"`} />
+                  </>
+                )}
+
+                <button onClick={() => setPending(null)}
+                  className="w-full text-center text-sm font-semibold text-ink-300 hover:text-ink py-2">
+                  ← Back to edit
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
+  )
+}
+
+function ChoiceBtn({ onClick, title, sub, primary }) {
+  return (
+    <button type="button" onClick={onClick}
+      className={`w-full text-left rounded-xl border px-4 py-3 transition-colors
+        ${primary ? 'border-press bg-press/5 hover:bg-press/10' : 'border-ink-100 bg-white hover:bg-ink-50'}`}>
+      <div className={`text-sm font-semibold ${primary ? 'text-press' : 'text-charcoal'}`}>{title}</div>
+      {sub && <div className="text-[11px] text-ink-300 mt-0.5">{sub}</div>}
+    </button>
   )
 }
 
