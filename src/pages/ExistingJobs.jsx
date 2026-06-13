@@ -6,12 +6,18 @@ import StatusBadge, { PaymentBadge, PaymentStatusBadge } from '../components/Sta
 import { SkeletonRow } from '../components/Skeleton'
 import EmptyState from '../components/EmptyState'
 import JobDetailPanel from '../components/JobDetailPanel'
+import { useLang } from '../context/LanguageContext'
+
+// translate a filter chip label
+const filterLabel = (t, f, kind) =>
+  f === 'All' ? t('common.all') : t(`${kind}.${f}`)
 
 const DELIVERY_FILTERS = ['All', 'Pending', 'In Progress']
 const PAYMENT_FILTERS = ['All', 'Paid', 'Partial', 'Pending']
 
 export default function ExistingJobs() {
   const navigate = useNavigate()
+  const { t } = useLang()
   const [loading, setLoading] = useState(true)
   const [jobs, setJobs] = useState([])
   const [paidByJob, setPaidByJob] = useState({})
@@ -79,10 +85,10 @@ export default function ExistingJobs() {
     <div className="space-y-5">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="font-heading font-bold text-2xl text-ink">Existing Jobs</h1>
-          <p className="text-sm text-ink-300">{jobs.length} active · finished jobs move to Completed Jobs</p>
+          <h1 className="font-heading font-bold text-2xl text-ink">{t('jobs.title')}</h1>
+          <p className="text-sm text-ink-300">{jobs.length} {t('jobs.active')} · {t('jobs.finishedMove')}</p>
         </div>
-        <button className="btn-accent" onClick={() => navigate('/new-job')}>+ New Job</button>
+        <button className="btn-accent" onClick={() => navigate('/new-job')}>+ {t('action.newJob')}</button>
       </div>
 
       {/* Search */}
@@ -90,7 +96,7 @@ export default function ExistingJobs() {
         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-300">⌕</span>
         <input
           className="input pl-10"
-          placeholder="Search jobs…"
+          placeholder={t('jobs.search')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -99,22 +105,22 @@ export default function ExistingJobs() {
       {/* Filters */}
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-400 w-16">Delivery</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-400 w-16">{t('jobs.deliveryLabel')}</span>
           {DELIVERY_FILTERS.map((f) => (
             <button key={f} onClick={() => setDelivery(f)}
               className={`px-3.5 py-1.5 rounded-full text-sm font-semibold transition-colors
                 ${delivery === f ? 'bg-ink text-white' : 'bg-white text-ink-300 border border-ink-100 hover:bg-ink-50'}`}>
-              {f} <span className="opacity-70">{deliveryCounts[f] ?? 0}</span>
+              {filterLabel(t, f, 'status')} <span className="opacity-70">{deliveryCounts[f] ?? 0}</span>
             </button>
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-400 w-16">Payment</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-400 w-16">{t('jobs.paymentLabel')}</span>
           {PAYMENT_FILTERS.map((f) => (
             <button key={f} onClick={() => setPayment(f)}
               className={`px-3.5 py-1.5 rounded-full text-sm font-semibold transition-colors
                 ${payment === f ? 'bg-press text-white' : 'bg-white text-ink-300 border border-ink-100 hover:bg-ink-50'}`}>
-              {f}
+              {filterLabel(t, f, 'paystatus')}
             </button>
           ))}
         </div>
@@ -126,15 +132,15 @@ export default function ExistingJobs() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-ink-50/60 text-ink-400 text-xs uppercase tracking-wide">
-                <th className="text-left font-semibold px-4 py-3">Job ID</th>
-                <th className="text-left font-semibold px-4 py-3">Customer</th>
-                <th className="text-left font-semibold px-4 py-3">Type</th>
-                <th className="text-right font-semibold px-4 py-3">Amount</th>
-                <th className="text-left font-semibold px-4 py-3">Method</th>
-                <th className="text-left font-semibold px-4 py-3">Payment</th>
-                <th className="text-left font-semibold px-4 py-3">Delivery</th>
-                <th className="text-left font-semibold px-4 py-3">Date</th>
-                <th className="text-right font-semibold px-4 py-3">Actions</th>
+                <th className="text-left font-semibold px-4 py-3">{t('col.jobId')}</th>
+                <th className="text-left font-semibold px-4 py-3">{t('field.customer')}</th>
+                <th className="text-left font-semibold px-4 py-3">{t('col.type')}</th>
+                <th className="text-right font-semibold px-4 py-3">{t('col.amount')}</th>
+                <th className="text-left font-semibold px-4 py-3">{t('col.method')}</th>
+                <th className="text-left font-semibold px-4 py-3">{t('jobs.paymentLabel')}</th>
+                <th className="text-left font-semibold px-4 py-3">{t('jobs.deliveryLabel')}</th>
+                <th className="text-left font-semibold px-4 py-3">{t('col.date')}</th>
+                <th className="text-right font-semibold px-4 py-3">{t('col.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-ink-50">
@@ -143,9 +149,9 @@ export default function ExistingJobs() {
               ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={9}>
-                    <EmptyState icon="🔍" title="No jobs found"
-                      message={query || delivery !== 'All' || payment !== 'All' ? 'Try a different search or filter.' : 'Create your first job.'}
-                      action={!query && delivery === 'All' && payment === 'All' && <button className="btn-accent" onClick={() => navigate('/new-job')}>New Job</button>} />
+                    <EmptyState icon="🔍" title={t('jobs.noneFound')}
+                      message={query || delivery !== 'All' || payment !== 'All' ? t('jobs.tryDifferent') : t('jobs.createFirst')}
+                      action={!query && delivery === 'All' && payment === 'All' && <button className="btn-accent" onClick={() => navigate('/new-job')}>{t('action.newJob')}</button>} />
                   </td>
                 </tr>
               ) : (
@@ -163,9 +169,9 @@ export default function ExistingJobs() {
                     <td className="px-4 py-3 text-ink-400 whitespace-nowrap">{formatDate(j.created_at)}</td>
                     <td className="px-4 py-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       <button className="text-xs font-semibold text-press hover:underline mr-3"
-                        onClick={() => navigate(j.order_group ? `/order/${j.order_group}` : `/invoice/${j.id}`)}>Invoice</button>
+                        onClick={() => navigate(j.order_group ? `/order/${j.order_group}` : `/invoice/${j.id}`)}>{t('jobs.invoice')}</button>
                       <button className="text-xs font-semibold text-ink hover:underline"
-                        onClick={() => duplicate(j)}>Duplicate</button>
+                        onClick={() => duplicate(j)}>{t('jobs.duplicate')}</button>
                     </td>
                   </tr>
                 ))

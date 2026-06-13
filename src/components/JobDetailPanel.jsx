@@ -9,6 +9,7 @@ import ConfirmDialog from './ConfirmDialog'
 import WhatsAppButton from './WhatsAppButton'
 import TimePicker from './TimePicker'
 import { buildOrderMessage, buildStatusMessage } from '../lib/whatsapp'
+import { useLang } from '../context/LanguageContext'
 
 const STATUSES = ['Pending', 'In Progress', 'Ready for Pickup', 'Delivered'] // delivery statuses
 
@@ -20,16 +21,17 @@ const DEFAULT_TYPES = [
 ]
 const PAPER_SIZES = ['A3', 'A4', 'A5', 'A6', 'Other']
 
-// the WhatsApp message + button label for each delivery status
-const WA_LABELS = {
-  'Pending': 'Send order confirmation',
-  'In Progress': 'Send "work started" update',
-  'Ready for Pickup': 'Send "ready for pickup" update',
-  'Delivered': 'Send thank-you message'
+// the WhatsApp button label key for each delivery status
+const WA_KEYS = {
+  'Pending': 'jd.waPending',
+  'In Progress': 'jd.waProgress',
+  'Ready for Pickup': 'jd.waReady',
+  'Delivered': 'jd.waDelivered'
 }
 
 export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate }) {
   const navigate = useNavigate()
+  const { t } = useLang()
   const [tab, setTab] = useState('details') // details | edit | payment
   const [busy, setBusy] = useState(false)
   const [payments, setPayments] = useState([])
@@ -278,9 +280,9 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
           {/* Tabs */}
           <div className="flex border-b border-ink-100 bg-white">
             {[
-              ['details', 'Details'],
-              ['edit', 'Edit'],
-              ['payment', 'Payment']
+              ['details', t('jd.details')],
+              ['edit', t('jd.edit')],
+              ['payment', t('jd.payment')]
             ].map(([key, label]) => (
               <button
                 key={key}
@@ -298,40 +300,40 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
             {tab === 'details' && (
               <>
                 <div className="card space-y-3">
-                  <Row label="Delivery Status"><StatusBadge status={form.status} /></Row>
-                  {form.is_urgent && <Row label="Priority"><span className="pill bg-press text-white">⚡ URGENT</span></Row>}
-                  {form.assigned_to && <Row label="Assigned to"><span className="pill bg-ink text-white">👤 {form.assigned_to}</span></Row>}
-                  <Row label="Payment Status"><PaymentStatusBadge status={paymentStatusOf(job, totalPaid)} /></Row>
-                  <Row label="Payment Method"><PaymentBadge type={job.payment_type} /></Row>
-                  <Row label="Job Type">{job.job_type === 'Other' ? job.custom_job_type : job.job_type}</Row>
-                  <Row label="Paper Size">{job.paper_size === 'Other' ? job.custom_paper_size : job.paper_size || '—'}</Row>
+                  <Row label={t('jd.deliveryStatus')}><StatusBadge status={form.status} /></Row>
+                  {form.is_urgent && <Row label={t('jd.priority')}><span className="pill bg-press text-white">⚡ URGENT</span></Row>}
+                  {form.assigned_to && <Row label={t('field.assignedTo')}><span className="pill bg-ink text-white">👤 {form.assigned_to}</span></Row>}
+                  <Row label={t('jd.paymentStatus')}><PaymentStatusBadge status={paymentStatusOf(job, totalPaid)} /></Row>
+                  <Row label={t('jd.paymentMethod')}><PaymentBadge type={job.payment_type} /></Row>
+                  <Row label={t('field.jobType')}>{job.job_type === 'Other' ? job.custom_job_type : job.job_type}</Row>
+                  <Row label={t('jd.paperSize')}>{job.paper_size === 'Other' ? job.custom_paper_size : job.paper_size || '—'}</Row>
                   {job.job_type === 'Flex' && (job.flex_width || job.flex_height) && (
-                    <Row label="Dimensions">{job.flex_width} × {job.flex_height} {job.flex_unit}</Row>
+                    <Row label={t('jd.dimensions')}>{job.flex_width} × {job.flex_height} {job.flex_unit}</Row>
                   )}
-                  <Row label="Quantity"><span className="font-mono">{job.quantity}</span></Row>
-                  <Row label="Rate"><span className="font-mono">{formatINR(job.rate)}</span></Row>
-                  <Row label="Total"><span className="font-mono font-semibold text-ink">{formatINR(job.total_amount)}</span></Row>
+                  <Row label={t('field.quantity')}><span className="font-mono">{job.quantity}</span></Row>
+                  <Row label={t('jd.rate')}><span className="font-mono">{formatINR(job.rate)}</span></Row>
+                  <Row label={t('jd.total')}><span className="font-mono font-semibold text-ink">{formatINR(job.total_amount)}</span></Row>
                   {(job.payment_type === 'Credit' || totalPaid > 0) && (
                     <>
-                      <Row label="Paid"><span className="font-mono text-leaf">{formatINR(totalPaid)}</span></Row>
-                      <Row label="Balance"><span className={`font-mono font-semibold ${balance > 0 ? 'text-press' : 'text-leaf'}`}>{formatINR(balance)}</span></Row>
+                      <Row label={t('jd.paid')}><span className="font-mono text-leaf">{formatINR(totalPaid)}</span></Row>
+                      <Row label={t('jd.balance')}><span className={`font-mono font-semibold ${balance > 0 ? 'text-press' : 'text-leaf'}`}>{formatINR(balance)}</span></Row>
                     </>
                   )}
-                  <Row label="Delivery">{job.delivery_date ? `${formatDate(job.delivery_date)}${job.delivery_time ? ' · ' + formatTime12(job.delivery_time) : ''}` : '—'}</Row>
+                  <Row label={t('field.delivery')}>{job.delivery_date ? `${formatDate(job.delivery_date)}${job.delivery_time ? ' · ' + formatTime12(job.delivery_time) : ''}` : '—'}</Row>
                   {job.status === 'Delivered' && job.delivered_at && (
-                    <Row label="Delivered on"><span className="text-leaf font-semibold">{formatDateTime(job.delivered_at)}</span></Row>
+                    <Row label={t('jd.deliveredOn')}><span className="text-leaf font-semibold">{formatDateTime(job.delivered_at)}</span></Row>
                   )}
-                  <Row label="Created">{formatDateTime(job.created_at)}</Row>
+                  <Row label={t('jd.created')}>{formatDateTime(job.created_at)}</Row>
                   {job.notes && (
                     <div className="pt-2 border-t border-ink-50">
-                      <div className="label">Notes</div>
+                      <div className="label">{t('field.notes')}</div>
                       <div className="text-sm text-charcoal/80 whitespace-pre-wrap">{job.notes}</div>
                     </div>
                   )}
                 </div>
 
                 <div>
-                  <div className="label">Quick delivery status</div>
+                  <div className="label">{t('jd.quickStatus')}</div>
                   <div className="grid grid-cols-2 gap-2">
                     {STATUSES.map((s) => (
                       <button
@@ -340,7 +342,7 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
                         onClick={() => setStatus(s)}
                         className={`btn text-sm ${form.status === s ? 'bg-ink text-white' : 'btn-outline'}`}
                       >
-                        {s}
+                        {t(`status.${s}`)}
                       </button>
                     ))}
                   </div>
@@ -349,12 +351,12 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
                 <WhatsAppButton
                   number={job.customers?.contact}
                   message={form.status === 'Pending' ? buildOrderMessage(job) : buildStatusMessage(job, form.status)}
-                  label={WA_LABELS[form.status] || 'Send WhatsApp'}
+                  label={t(WA_KEYS[form.status] || 'jd.waDefault')}
                   className="btn w-full bg-[#25D366] text-white hover:bg-[#1faa52] disabled:opacity-50" />
 
                 <div className="grid grid-cols-2 gap-2">
-                  <button className="btn-primary" onClick={() => navigate(job.order_group ? `/order/${job.order_group}` : `/invoice/${job.id}`)}>View Invoice</button>
-                  <button className="btn-outline" onClick={() => onDuplicate?.(job)}>Duplicate Job</button>
+                  <button className="btn-primary" onClick={() => navigate(job.order_group ? `/order/${job.order_group}` : `/invoice/${job.id}`)}>{t('jd.viewInvoice')}</button>
+                  <button className="btn-outline" onClick={() => onDuplicate?.(job)}>{t('jd.duplicateJob')}</button>
                 </div>
 
                 <button
@@ -362,7 +364,7 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
                   disabled={busy}
                   onClick={() => setConfirmDelete(true)}
                 >
-                  Delete Job
+                  {t('jd.deleteJob')}
                 </button>
               </>
             )}
@@ -371,23 +373,23 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
               <div className="space-y-4">
                 {/* Customer */}
                 <div>
-                  <label className="label">Customer Name</label>
+                  <label className="label">{t('jd.customerName')}</label>
                   <input className="input" value={form.customerName}
                     onChange={(e) => setForm({ ...form, customerName: e.target.value })} />
                 </div>
                 <div>
-                  <label className="label">Place / Area</label>
+                  <label className="label">{t('jd.place')}</label>
                   <input className="input" placeholder="e.g. Kalaiyarkovil, Karaikudi…" value={form.place}
                     onChange={(e) => setForm({ ...form, place: e.target.value })} />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="label">WhatsApp Number</label>
+                    <label className="label">{t('jd.whatsapp')}</label>
                     <input className="input font-mono" value={form.contact}
                       onChange={(e) => setForm({ ...form, contact: e.target.value })} />
                   </div>
                   <div>
-                    <label className="label">Additional Number</label>
+                    <label className="label">{t('jd.additional')}</label>
                     <input className="input font-mono" value={form.altContact}
                       onChange={(e) => setForm({ ...form, altContact: e.target.value })} />
                   </div>
@@ -395,17 +397,17 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
 
                 {/* Job type */}
                 <div>
-                  <label className="label">Job Type</label>
+                  <label className="label">{t('field.jobType')}</label>
                   <select className="input" value={form.jobType}
                     onChange={(e) => setForm({ ...form, jobType: e.target.value })}>
-                    <option value="">Select job type…</option>
-                    {jobTypes.map((t) => <option key={t} value={t}>{t}</option>)}
-                    <option value="Other">Other…</option>
+                    <option value="">{t('jd.selectType')}</option>
+                    {jobTypes.map((jt) => <option key={jt} value={jt}>{jt}</option>)}
+                    <option value="Other">{t('jd.other')}</option>
                   </select>
                 </div>
                 {form.jobType === 'Other' && (
                   <div>
-                    <label className="label">Custom Job Type</label>
+                    <label className="label">{t('jd.customType')}</label>
                     <input className="input" value={form.customJobType}
                       onChange={(e) => setForm({ ...form, customJobType: e.target.value })} />
                   </div>
@@ -415,17 +417,17 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
                 {form.jobType === 'Flex' && (
                   <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <label className="label">Width</label>
+                      <label className="label">{t('jd.width')}</label>
                       <input type="number" className="input font-mono" value={form.flexWidth}
                         onChange={(e) => setForm({ ...form, flexWidth: e.target.value })} />
                     </div>
                     <div>
-                      <label className="label">Height</label>
+                      <label className="label">{t('jd.height')}</label>
                       <input type="number" className="input font-mono" value={form.flexHeight}
                         onChange={(e) => setForm({ ...form, flexHeight: e.target.value })} />
                     </div>
                     <div>
-                      <label className="label">Unit</label>
+                      <label className="label">{t('jd.unit')}</label>
                       <select className="input" value={form.flexUnit}
                         onChange={(e) => setForm({ ...form, flexUnit: e.target.value })}>
                         <option value="ft">ft</option>
@@ -437,16 +439,16 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
 
                 {/* Paper size */}
                 <div>
-                  <label className="label">Paper Size</label>
+                  <label className="label">{t('jd.paperSize')}</label>
                   <select className="input" value={form.paperSize}
                     onChange={(e) => setForm({ ...form, paperSize: e.target.value })}>
-                    <option value="">Select size…</option>
+                    <option value="">{t('jd.selectSize')}</option>
                     {PAPER_SIZES.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
                 {form.paperSize === 'Other' && (
                   <div>
-                    <label className="label">Custom Paper Size</label>
+                    <label className="label">{t('jd.customSize')}</label>
                     <input className="input" value={form.customPaperSize}
                       onChange={(e) => setForm({ ...form, customPaperSize: e.target.value })} />
                   </div>
@@ -455,18 +457,18 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
                 {/* Quantity / Rate */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="label">Quantity</label>
+                    <label className="label">{t('field.quantity')}</label>
                     <input type="number" className="input font-mono" value={form.quantity}
                       onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
                   </div>
                   <div>
-                    <label className="label">Rate (₹)</label>
+                    <label className="label">{t('jd.rateRupee')}</label>
                     <input type="number" className="input font-mono" value={form.rate}
                       onChange={(e) => setForm({ ...form, rate: e.target.value })} />
                   </div>
                 </div>
                 <div className="card bg-leaf/5 flex items-center justify-between">
-                  <span className="label mb-0">New Total</span>
+                  <span className="label mb-0">{t('jd.newTotal')}</span>
                   <span className="font-mono font-semibold text-leaf text-lg">
                     {formatINR((Number(form.quantity) || 0) * (Number(form.rate) || 0))}
                   </span>
@@ -474,47 +476,47 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
 
                 {/* Delivery status + urgent + assign */}
                 <div>
-                  <label className="label">Delivery Status</label>
+                  <label className="label">{t('jd.deliveryStatus')}</label>
                   <select className="input" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-                    {STATUSES.map((s) => <option key={s}>{s}</option>)}
+                    {STATUSES.map((s) => <option key={s} value={s}>{t(`status.${s}`)}</option>)}
                   </select>
                 </div>
 
                 <button type="button" onClick={() => setForm({ ...form, is_urgent: !form.is_urgent })}
                   className={`w-full flex items-center justify-between rounded-xl border-2 px-4 py-3 transition-colors
                     ${form.is_urgent ? 'border-press bg-press/5' : 'border-ink-100 bg-white hover:bg-ink-50'}`}>
-                  <span className="flex items-center gap-2 font-semibold text-charcoal">⚡ Urgent</span>
+                  <span className="flex items-center gap-2 font-semibold text-charcoal">⚡ {t('jd.urgent')}</span>
                   <span className={`w-11 h-6 rounded-full p-0.5 transition-colors ${form.is_urgent ? 'bg-press' : 'bg-ink-100'}`}>
                     <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform ${form.is_urgent ? 'translate-x-5' : ''}`} />
                   </span>
                 </button>
 
                 <div>
-                  <label className="label">Assign to Employee</label>
-                  <input className="input" placeholder="Employee name"
+                  <label className="label">{t('jd.assignEmp')}</label>
+                  <input className="input" placeholder={t('jd.empName')}
                     value={form.assigned_to}
                     onChange={(e) => setForm({ ...form, assigned_to: e.target.value })} />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="label">Delivery Date</label>
+                    <label className="label">{t('jd.deliveryDate')}</label>
                     <input type="date" className="input" value={form.delivery_date || ''}
                       onChange={(e) => setForm({ ...form, delivery_date: e.target.value })} />
                   </div>
                   <div>
-                    <label className="label">Delivery Time</label>
+                    <label className="label">{t('jd.deliveryTime')}</label>
                     <TimePicker value={form.delivery_time || ''}
                       onChange={(v) => setForm({ ...form, delivery_time: v })} />
                   </div>
                 </div>
                 <div>
-                  <label className="label">Notes</label>
+                  <label className="label">{t('field.notes')}</label>
                   <textarea className="input min-h-[90px]" value={form.notes}
                     onChange={(e) => setForm({ ...form, notes: e.target.value })} />
                 </div>
                 <button className="btn-primary w-full" disabled={busy} onClick={saveEdits}>
-                  {busy ? 'Saving…' : 'Save changes'}
+                  {busy ? t('jd.saving') : t('jd.saveChanges')}
                 </button>
               </div>
             )}
@@ -522,44 +524,44 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
             {tab === 'payment' && (
               <div className="space-y-5">
                 <div className="card space-y-2">
-                  <Row label="Total"><span className="font-mono">{formatINR(job.total_amount)}</span></Row>
-                  <Row label="Paid"><span className="font-mono text-leaf">{formatINR(totalPaid)}</span></Row>
-                  <Row label="Balance"><span className="font-mono font-semibold text-press">{formatINR(balance)}</span></Row>
+                  <Row label={t('jd.total')}><span className="font-mono">{formatINR(job.total_amount)}</span></Row>
+                  <Row label={t('jd.paid')}><span className="font-mono text-leaf">{formatINR(totalPaid)}</span></Row>
+                  <Row label={t('jd.balance')}><span className="font-mono font-semibold text-press">{formatINR(balance)}</span></Row>
                 </div>
 
                 <div className="space-y-3">
                   <div>
-                    <label className="label">Amount received</label>
+                    <label className="label">{t('jd.amountReceived')}</label>
                     <input type="number" className="input font-mono" placeholder="0"
                       value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
                   </div>
                   <div>
-                    <label className="label">Payment type</label>
+                    <label className="label">{t('jd.paymentType')}</label>
                     <div className="grid grid-cols-2 gap-2">
-                      {['Cash', 'UPI'].map((t) => (
-                        <button key={t} type="button"
-                          onClick={() => setPayType(t)}
-                          className={`btn text-sm ${payType === t ? 'bg-ink text-white' : 'btn-outline'}`}>
-                          {t}
+                      {['Cash', 'UPI'].map((pt) => (
+                        <button key={pt} type="button"
+                          onClick={() => setPayType(pt)}
+                          className={`btn text-sm ${payType === pt ? 'bg-ink text-white' : 'btn-outline'}`}>
+                          {pt}
                         </button>
                       ))}
                     </div>
                   </div>
                   <div className="flex gap-2">
                     <button className="btn-accent flex-1" disabled={busy} onClick={addPayment}>
-                      Record payment
+                      {t('jd.recordPayment')}
                     </button>
                     <button className="btn-outline" disabled={busy}
                       onClick={() => { setPayAmount(String(balance)); }}>
-                      Full ({formatINR(balance)})
+                      {t('jd.full')} ({formatINR(balance)})
                     </button>
                   </div>
                 </div>
 
                 <div>
-                  <div className="label">Payment history</div>
+                  <div className="label">{t('jd.paymentHistory')}</div>
                   {payments.length === 0 ? (
-                    <div className="text-sm text-ink-300">No payments recorded yet.</div>
+                    <div className="text-sm text-ink-300">{t('jd.noPayments')}</div>
                   ) : (
                     <div className="space-y-2">
                       {payments.map((p) => (
@@ -583,9 +585,9 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
       <ConfirmDialog
         open={confirmDelete}
         danger
-        title="Delete this job?"
-        message={`${job.job_id} (${customerName}) will be moved to Deleted Jobs. Its Job ID will not be reused, and you can restore it later. Any recorded payments for it will be removed.`}
-        confirmText="Delete"
+        title={t('jd.deleteTitle')}
+        message={`${job.job_id} (${customerName}) — ${t('jd.deleteMsg')}`}
+        confirmText={t('jd.deleteConfirm')}
         onCancel={() => setConfirmDelete(false)}
         onConfirm={deleteJob}
       />

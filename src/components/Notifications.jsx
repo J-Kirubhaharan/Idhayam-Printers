@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { supabase } from '../lib/supabase'
 import { todayIST, formatDate, formatTime12, deliveryDeadline } from '../lib/format'
+import JobDetailPanel from './JobDetailPanel'
 
 const SEEN_KEY = 'idhayam_notif_seen'
 const READ_KEY = 'idhayam_notif_read'
@@ -27,6 +28,7 @@ export default function Notifications() {
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState([])
   const [readKeys, setReadKeys] = useState(getArr(READ_KEY))
+  const [selectedJob, setSelectedJob] = useState(null)
   const tick = useRef(0)
 
   const compute = async () => {
@@ -54,7 +56,7 @@ export default function Notifications() {
               key: `time-${j.id}`, kind: 'time', big: true, hrs,
               icon: '⏰', title: `Finish in ${humanize(hrs)}`,
               detail: `${type} for ${who} · by ${formatTime12(j.delivery_time)}`,
-              jobId: j.job_id, to: `/invoice/${j.id}`
+              jobId: j.job_id, jobUuid: j.id
             })
             continue
           }
@@ -67,7 +69,7 @@ export default function Notifications() {
           key: `due-${j.id}`, kind: 'due', icon: '📅',
           title: 'Deliver tomorrow',
           detail: `${type} for ${who} (${j.job_id})`,
-          jobId: j.job_id, to: `/invoice/${j.id}`
+          jobId: j.job_id, jobUuid: j.id
         })
       }
 
@@ -79,7 +81,7 @@ export default function Notifications() {
             key: `ready-${j.id}`, kind: 'ready', icon: '📦',
             title: 'Waiting for pickup over a day',
             detail: `${type} for ${who} — please follow up`,
-            jobId: j.job_id, to: `/invoice/${j.id}`
+            jobId: j.job_id, jobUuid: j.id
           })
         }
       }
@@ -94,7 +96,7 @@ export default function Notifications() {
         icon: a.event.includes('finished') ? '✅' : a.event.includes('Design') ? '🎨' : '🖨',
         title: a.event,
         detail: `${a.job_code} · ${a.customer_name}`,
-        to: a.job_id ? `/invoice/${a.job_id}` : '/all-orders'
+        jobUuid: a.job_id
       })
     }
 
@@ -171,7 +173,25 @@ export default function Notifications() {
     }
   }
 
-  const go = (n) => { setOpen(false); navigate(n.to) }
+  // open the slide-in job detail panel for the notification's job
+  const go = async (n) => {
+    setOpen(false)
+    if (!n.jobUuid) return
+    const { data } = await supabase
+      .from('jobs').select('*, customers(name,contact,alt_contact,place)')
+      .eq('id', n.jobUuid).is('deleted_at', null).maybeSingle()
+    if (data) setSelectedJob(data)
+    else toast('That job is no longer available.')
+  }
+
+  const refreshSelected = async () => {
+    compute()
+    if (!selectedJob) return
+    const { data } = await supabase
+      .from('jobs').select('*, customers(name,contact,alt_contact,place)')
+      .eq('id', selectedJob.id).is('deleted_at', null).maybeSingle()
+    setSelectedJob(data || null)
+  }
 
   // dismiss any notification: activity events are deleted from the DB; reminders
   // are remembered locally so they stay cleared until they next become relevant.
@@ -239,6 +259,15 @@ export default function Notifications() {
           </>
         )}
       </AnimatePresence>
+
+      {selectedJob && (
+        <JobDetailPanel
+          job={selectedJob}
+          onClose={() => setSelectedJob(null)}
+          onChanged={refreshSelected}
+          onDuplicate={(job) => { setSelectedJob(null); navigate('/new-job', { state: { duplicate: job } }) }}
+        />
+      )}
     </div>
   )
 }
