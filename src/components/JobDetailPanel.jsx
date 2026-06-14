@@ -66,7 +66,8 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
       delivery_time: job.delivery_time || '',
       notes: job.notes || '',
       is_urgent: !!job.is_urgent,
-      assigned_to: job.assigned_to || '',
+      design_assignee: job.design_assignee || '',
+      print_assignee: job.print_assignee || '',
       customerName: job.customers?.name || '',
       contact: job.customers?.contact || '',
       altContact: job.customers?.alt_contact || '',
@@ -133,7 +134,8 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
       if ((job.delivery_date || '') !== (form.delivery_date || '')) changes.push('Delivery date')
       if ((job.delivery_time || '') !== (form.delivery_time || '')) changes.push('Delivery time')
       if (!!job.is_urgent !== !!form.is_urgent) changes.push('Urgent')
-      if ((job.assigned_to || '') !== (form.assigned_to?.trim() || '')) changes.push('Assigned to')
+      if ((job.design_assignee || '') !== (form.design_assignee?.trim() || '')) changes.push('Design assignee')
+      if ((job.print_assignee || '') !== (form.print_assignee?.trim() || '')) changes.push('Print assignee')
       if ((job.notes || '') !== (form.notes || '')) changes.push('Notes')
       if (job.status !== form.status) changes.push('Status')
 
@@ -156,7 +158,8 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
           notes: form.notes || null,
           status: form.status,
           is_urgent: form.is_urgent,
-          assigned_to: form.assigned_to?.trim() || null
+          design_assignee: form.design_assignee?.trim() || null,
+          print_assignee: form.print_assignee?.trim() || null
         })
         .eq('id', job.id)
       if (jErr) throw jErr
@@ -304,7 +307,8 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
                 <div className="card space-y-3">
                   <Row label={t('jd.deliveryStatus')}><StatusBadge status={form.status} /></Row>
                   {form.is_urgent && <Row label={t('jd.priority')}><span className="pill bg-press text-white">⚡ URGENT</span></Row>}
-                  {form.assigned_to && <Row label={t('field.assignedTo')}><span className="pill bg-ink text-white">👤 {form.assigned_to}</span></Row>}
+                  {job.design_assignee && <Row label={t('assign.design')}><span className="pill bg-press text-white">👤 {job.design_assignee}</span></Row>}
+                  {job.print_assignee && <Row label={t('assign.print')}><span className="pill bg-ink text-white">👤 {job.print_assignee}</span></Row>}
                   <Row label={t('jd.paymentStatus')}><PaymentStatusBadge status={paymentStatusOf(job, totalPaid)} /></Row>
                   <Row label={t('jd.paymentMethod')}><PaymentBadge type={job.payment_type} /></Row>
                   <Row label={t('field.jobType')}>{job.job_type === 'Other' ? job.custom_job_type : job.job_type}</Row>
@@ -501,12 +505,22 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
                   </span>
                 </button>
 
-                <div>
-                  <label className="label">{t('jd.assignEmp')}</label>
-                  <input className="input" placeholder={t('jd.empName')}
-                    value={form.assigned_to}
-                    onChange={(e) => setForm({ ...form, assigned_to: e.target.value })} />
-                </div>
+                {job.needs_design && (
+                  <div>
+                    <label className="label">{t('assign.design')}</label>
+                    <input className="input" placeholder={t('assign.namePlaceholder')}
+                      value={form.design_assignee}
+                      onChange={(e) => setForm({ ...form, design_assignee: e.target.value })} />
+                  </div>
+                )}
+                {job.needs_printing && (
+                  <div>
+                    <label className="label">{t('assign.print')}</label>
+                    <input className="input" placeholder={t('assign.namePlaceholder')}
+                      value={form.print_assignee}
+                      onChange={(e) => setForm({ ...form, print_assignee: e.target.value })} />
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>

@@ -41,7 +41,8 @@ const emptyForm = {
   paidNow: '',
   paidVia: 'Cash',
   isUrgent: false,
-  assignedTo: ''
+  designAssignee: '',
+  printAssignee: ''
 }
 
 const lineTotal = (it) => (Number(it.quantity) || 0) * (Number(it.rate) || 0)
@@ -108,7 +109,8 @@ export default function NewJob() {
         deliveryTime: dup.delivery_time || '',
         paymentType: dup.payment_type || 'Cash',
         isUrgent: !!dup.is_urgent,
-        assignedTo: dup.assigned_to || ''
+        designAssignee: dup.design_assignee || '',
+        printAssignee: dup.print_assignee || ''
       })
       toast.success('Job details copied — review & save')
       return
@@ -338,7 +340,8 @@ export default function NewJob() {
           total_amount: lineTotal(it),
           discount: shares[itemNo - 1] || 0,
           is_urgent: form.isUrgent,
-          assigned_to: form.assignedTo.trim() || null,
+          design_assignee: it.needsDesign ? (form.designAssignee.trim() || null) : null,
+          print_assignee: it.needsPrinting ? (form.printAssignee.trim() || null) : null,
           needs_design: it.needsDesign,
           needs_printing: it.needsPrinting,
           production_stage: stage,
@@ -649,12 +652,21 @@ export default function NewJob() {
                 </span>
               </button>
 
-              <div>
-                <label className="label">Assign to Employee (optional)</label>
-                <input className="input" placeholder="Employee name" value={form.assignedTo}
-                  onChange={(e) => set('assignedTo', e.target.value)} />
-                <p className="text-[11px] text-ink-300 mt-1">Applies to all items · you can reassign individually from the Job Board.</p>
-              </div>
+              {form.items.some((it) => it.needsDesign) && (
+                <div>
+                  <label className="label">Design — assign to (optional)</label>
+                  <input className="input" placeholder="Designer name" value={form.designAssignee}
+                    onChange={(e) => set('designAssignee', e.target.value)} />
+                </div>
+              )}
+              {form.items.some((it) => it.needsPrinting) && (
+                <div>
+                  <label className="label">Printing — assign to (optional)</label>
+                  <input className="input" placeholder="Printer name" value={form.printAssignee}
+                    onChange={(e) => set('printAssignee', e.target.value)} />
+                  <p className="text-[11px] text-ink-300 mt-1">The team can confirm or change the name when they start. You can also edit later.</p>
+                </div>
+              )}
             </motion.div>
           )}
 

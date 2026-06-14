@@ -55,6 +55,9 @@ export default function TeamBoard({ team }) {
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState(null)
+  const [prompt, setPrompt] = useState(null)   // { job, action } when a Start needs the worker name
+  const [enterMode, setEnterMode] = useState(false)
+  const [nameInput, setNameInput] = useState('')
 
   const fetchBoard = async () => {
     const { data } = await supabase
@@ -77,14 +80,32 @@ export default function TeamBoard({ team }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [team])
 
+  const teamAssignee = (job) => team === 'design' ? job.design_assignee : job.print_assignee
+
   const advance = async (job) => {
     const btn = cfg.button[job.production_stage]
     if (!btn) return
+    // a Start asks who's working first; a Finish just advances
+    if (btn.action.startsWith('start')) {
+      const existing = teamAssignee(job) || ''
+      setPrompt({ job, action: btn.action })
+      setEnterMode(!existing)          // no name yet -> ask "who is working"; else "are you X?"
+      setNameInput(existing)
+      return
+    }
+    doAdvance(job, btn.action, null)
+  }
+
+  // run the stage change, optionally recording the worker's name
+  const doAdvance = async (job, action, worker) => {
+    setPrompt(null)
     setBusyId(job.id)
-    const { error } = await supabase.rpc('advance_production', { p_job: job.id, p_action: btn.action })
+    const { error } = await supabase.rpc('advance_production', {
+      p_job: job.id, p_action: action, p_worker: worker ?? null
+    })
     setBusyId(null)
     if (error) { toast.error('Could not update. Try again.'); return }
-    toast.success(btn.action.startsWith('finish') ? 'Marked finished' : 'Work started')
+    toast.success(action.startsWith('finish') ? 'Marked finished' : 'Work started')
     fetchBoard()
   }
 
@@ -155,7 +176,7 @@ export default function TeamBoard({ team }) {
                 <SectionHeader title={`⚡ ${t('board.urgent')}`} count={urgent.length} accent />
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
                   <AnimatePresence>
-                    {urgent.map((j) => <Card key={j.id} job={j} today={today} cfg={cfg} busy={busyId === j.id} onAdvance={() => advance(j)} />)}
+                    {urgent.map((j) => <Card key={j.id} job={j} today={today} cfg={cfg} team={team} busy={busyId === j.id} onAdvance={() => advance(j)} />)}
                   </AnimatePresence>
                 </div>
               </section>
@@ -165,7 +186,7 @@ export default function TeamBoard({ team }) {
                 <SectionHeader title={g.day === today ? t('board.today') : formatDate(g.list[0].created_at)} count={g.list.length} />
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
                   <AnimatePresence>
-                    {g.list.map((j) => <Card key={j.id} job={j} today={today} cfg={cfg} busy={busyId === j.id} onAdvance={() => advance(j)} />)}
+                    {g.list.map((j) => <Card key={j.id} job={j} today={today} cfg={cfg} team={team} busy={busyId === j.id} onAdvance={() => advance(j)} />)}
                   </AnimatePresence>
                 </div>
               </section>
@@ -173,6 +194,55 @@ export default function TeamBoard({ team }) {
           </div>
         )}
       </main>
+
+      {/* Who's working? prompt shown when a team member taps Start */}
+      <AnimatePresence>
+        {prompt && (
+          <motion.div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setPrompt(null)}>
+            <motion.div
+              className="bg-paper w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl shadow-panel overflow-hidden"
+              initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}>
+              <div className="bg-ink text-white px-5 py-4">
+                <div className="font-mono text-xs text-ink-100">{prompt.job.job_id}</div>
+                <div className="font-heading font-bold text-lg leading-tight">
+                  {enterMode
+                    ? t('start.whoWorking')
+                    : `${t('start.areYouPre')} ${teamAssignee(prompt.job)}${t('start.areYouPost')}`}
+                </div>
+              </div>
+              <div className="p-5 space-y-2.5">
+                {!enterMode ? (
+                  <>
+                    <button onClick={() => doAdvance(prompt.job, prompt.action, null)}
+                      className="w-full py-3 rounded-xl bg-leaf text-white font-bold text-sm">{t('start.yes')}</button>
+                    <button onClick={() => { setEnterMode(true); setNameInput('') }}
+                      className="w-full py-3 rounded-xl bg-white border border-ink-100 text-charcoal font-semibold text-sm hover:bg-ink-50">{t('start.no')}</button>
+                    <button onClick={() => doAdvance(prompt.job, prompt.action, null)}
+                      className="w-full py-2 text-ink-300 hover:text-ink font-semibold text-sm">{t('start.noNeed')}</button>
+                  </>
+                ) : (
+                  <>
+                    <input autoFocus className="input" placeholder={t('start.enterName')}
+                      value={nameInput} onChange={(e) => setNameInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && nameInput.trim()) doAdvance(prompt.job, prompt.action, nameInput.trim()) }} />
+                    <button onClick={() => doAdvance(prompt.job, prompt.action, nameInput.trim())}
+                      disabled={!nameInput.trim()}
+                      className="w-full py-3 rounded-xl bg-leaf text-white font-bold text-sm disabled:opacity-50">{t('start.startWithName')}</button>
+                    <button onClick={() => doAdvance(prompt.job, prompt.action, null)}
+                      className="w-full py-2 text-ink-300 hover:text-ink font-semibold text-sm">{t('start.noNeed')}</button>
+                  </>
+                )}
+                <button onClick={() => setPrompt(null)}
+                  className="w-full py-2 text-ink-300 hover:text-ink text-xs">{t('start.cancel')}</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -187,9 +257,10 @@ function SectionHeader({ title, count, accent }) {
   )
 }
 
-function Card({ job, today, cfg, busy, onAdvance }) {
+function Card({ job, today, cfg, team, busy, onAdvance }) {
   const [expanded, setExpanded] = useState(false)
   const { t } = useLang()
+  const worker = team === 'design' ? job.design_assignee : job.print_assignee
 
   const jobType = job.job_type === 'Other' ? job.custom_job_type : job.job_type
   const size = job.job_type === 'Flex' && (job.flex_width || job.flex_height)
@@ -227,9 +298,9 @@ function Card({ job, today, cfg, busy, onAdvance }) {
             </div>
           </div>
 
-          {/* Assigned employee — highlighted at the top */}
-          {job.assigned_to && (
-            <div className="mb-2"><span className="pill bg-ink text-white text-sm">👤 {job.assigned_to}</span></div>
+          {/* Assigned worker for this team — highlighted at the top */}
+          {worker && (
+            <div className="mb-2"><span className="pill bg-ink text-white text-sm">👤 {worker}</span></div>
           )}
 
           <div className="font-heading font-bold text-xl text-ink leading-tight">{jobType}</div>
@@ -262,7 +333,7 @@ function Card({ job, today, cfg, busy, onAdvance }) {
                   <DetailRow label={t('field.customer')} value={job.customer_name || '—'} />
                   {job.customer_contact && <DetailRow label={t('field.phone')} value={job.customer_contact} mono />}
                   <DetailRow label={t('field.delivery')} value={job.delivery_date ? formatDate(job.delivery_date) + timeSuffix : 'No date set'} valueCls={dueCls} />
-                  {job.assigned_to && <DetailRow label={t('field.assignedTo')} value={job.assigned_to} />}
+                  {worker && <DetailRow label={t('field.assignedTo')} value={worker} />}
                   <DetailRow label={t('field.status')} value={t(`pstage.${job.production_stage}`)} />
                   <DetailRow label={t('field.orderTaken')} value={formatDateTime(job.created_at)} />
                   {job.notes && (

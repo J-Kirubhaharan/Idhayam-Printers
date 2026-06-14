@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { supabase } from '../lib/supabase'
+import { useLang } from '../context/LanguageContext'
 import { formatDate, formatDateTime, formatTime12, todayIST } from '../lib/format'
 import EmptyState from '../components/EmptyState'
 import { Skeleton } from '../components/Skeleton'
@@ -53,7 +54,7 @@ export default function OwnerBoard() {
 
   // list of names already used, for quick re-assigning
   const names = useMemo(
-    () => Array.from(new Set(jobs.map((j) => j.assigned_to).filter(Boolean))),
+    () => Array.from(new Set(jobs.flatMap((j) => [j.design_assignee, j.print_assignee]).filter(Boolean))),
     [jobs]
   )
 
@@ -126,7 +127,9 @@ function SectionHeader({ title, count, accent }) {
 }
 
 function OwnerJobCard({ job, today, onUpdate }) {
-  const [assignee, setAssignee] = useState(job.assigned_to || '')
+  const { t } = useLang()
+  const [designName, setDesignName] = useState(job.design_assignee || '')
+  const [printName, setPrintName] = useState(job.print_assignee || '')
   const [busy, setBusy] = useState(false)
 
   const jobType = job.job_type === 'Other' ? job.custom_job_type : job.job_type
@@ -142,9 +145,15 @@ function OwnerJobCard({ job, today, onUpdate }) {
     else if (job.delivery_date === today) { dueCls = 'text-amber_warn font-semibold'; dueLabel = `Today · ${formatDate(job.delivery_date)}${timeSuffix}` }
   }
 
-  const dirty = (assignee.trim() || '') !== (job.assigned_to || '')
+  const designDirty = (designName.trim() || '') !== (job.design_assignee || '')
+  const printDirty = (printName.trim() || '') !== (job.print_assignee || '')
+  const dirty = designDirty || printDirty
 
   const run = async (fn) => { setBusy(true); await fn(); setBusy(false) }
+  const saveNames = () => run(() => onUpdate(job.id, {
+    design_assignee: designName.trim() || null,
+    print_assignee: printName.trim() || null
+  }, 'Assignment updated'))
 
   return (
     <motion.div
@@ -167,17 +176,27 @@ function OwnerJobCard({ job, today, onUpdate }) {
         {/* live production stage (Design / Print pipeline) */}
         {job.production_stage && job.production_stage !== 'None' && (
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs text-ink-300">Status</span>
+            <span className="text-xs text-ink-300">{t('board.status')}</span>
             <StageBadge stage={job.production_stage} />
           </div>
         )}
 
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs text-ink-300">Assigned to</span>
-          {job.assigned_to
-            ? <span className="pill bg-ink text-white">👤 {job.assigned_to}</span>
-            : <span className="pill bg-ink-50 text-ink-400">None</span>}
-        </div>
+        {job.needs_design && (
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs text-ink-300">{t('board.design')}</span>
+            {job.design_assignee
+              ? <span className="pill bg-press text-white">👤 {job.design_assignee}</span>
+              : <span className="pill bg-ink-50 text-ink-400">{t('board.none')}</span>}
+          </div>
+        )}
+        {job.needs_printing && (
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs text-ink-300">{t('board.print')}</span>
+            {job.print_assignee
+              ? <span className="pill bg-ink text-white">👤 {job.print_assignee}</span>
+              : <span className="pill bg-ink-50 text-ink-400">{t('board.none')}</span>}
+          </div>
+        )}
 
         <div className="font-heading font-bold text-lg text-ink leading-tight">{jobType}</div>
         <div className="text-sm text-ink-400 mb-3">
@@ -198,25 +217,25 @@ function OwnerJobCard({ job, today, onUpdate }) {
 
         {/* Owner controls */}
         <div className="mt-4 pt-3 border-t border-ink-50 space-y-3">
-          <div>
-            <label className="label">Assign to</label>
-            <div className="flex gap-2">
-              <input
-                className="input"
-                list="assignee-names"
-                placeholder="Employee name"
-                value={assignee}
-                onChange={(e) => setAssignee(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && dirty) run(() => onUpdate(job.id, { assigned_to: assignee.trim() || null }, 'Assignment updated')) }}
-              />
-              {dirty && (
-                <button className="btn-primary px-3" disabled={busy}
-                  onClick={() => run(() => onUpdate(job.id, { assigned_to: assignee.trim() || null }, 'Assignment updated'))}>
-                  Save
-                </button>
-              )}
+          {job.needs_design && (
+            <div>
+              <label className="label">{t('assign.design')}</label>
+              <input className="input" list="assignee-names" placeholder={t('assign.namePlaceholder')}
+                value={designName} onChange={(e) => setDesignName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && dirty) saveNames() }} />
             </div>
-          </div>
+          )}
+          {job.needs_printing && (
+            <div>
+              <label className="label">{t('assign.print')}</label>
+              <input className="input" list="assignee-names" placeholder={t('assign.namePlaceholder')}
+                value={printName} onChange={(e) => setPrintName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && dirty) saveNames() }} />
+            </div>
+          )}
+          {dirty && (
+            <button className="btn-primary w-full" disabled={busy} onClick={saveNames}>{t('assign.save')}</button>
+          )}
 
           <div className="grid grid-cols-2 gap-2">
             <button

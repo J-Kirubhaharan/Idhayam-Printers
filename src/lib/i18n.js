@@ -59,6 +59,26 @@ export const strings = {
   'board.noActive': { en: 'No active orders right now. New jobs appear here instantly.', ta: 'தற்போது வேலைகள் இல்லை. புதிய வேலைகள் உடனே இங்கே தோன்றும்.' },
   'board.tapDetails': { en: 'Tap for full details', ta: 'விவரங்களுக்கு தட்டவும்' },
   'board.tapCollapse': { en: 'Tap to collapse', ta: 'மூட தட்டவும்' },
+  'board.status': { en: 'Status', ta: 'நிலை' },
+  'board.assignedTo': { en: 'Assigned to', ta: 'ஒதுக்கப்பட்டவர்' },
+  'board.none': { en: 'None', ta: 'யாருமில்லை' },
+  'board.design': { en: 'Design', ta: 'டிசைன்' },
+  'board.print': { en: 'Print', ta: 'அச்சு' },
+
+  // Worker assignment (design / print) + Start prompt
+  'assign.design': { en: 'Design — assigned to', ta: 'டிசைன் — ஒதுக்கப்பட்டவர்' },
+  'assign.print': { en: 'Print — assigned to', ta: 'அச்சு — ஒதுக்கப்பட்டவர்' },
+  'assign.namePlaceholder': { en: 'Employee name', ta: 'பணியாளர் பெயர்' },
+  'assign.save': { en: 'Save', ta: 'சேமி' },
+  'start.areYouPre': { en: 'Are you', ta: 'நீங்கள்' },
+  'start.areYouPost': { en: '?', ta: ' தானா?' },
+  'start.whoWorking': { en: 'Who is working on this?', ta: 'இதை யார் செய்கிறார்?' },
+  'start.yes': { en: "Yes, that's me", ta: 'ஆம், நான்தான்' },
+  'start.no': { en: 'No, someone else', ta: 'இல்லை, வேறு நபர்' },
+  'start.noNeed': { en: 'No need — just start', ta: 'தேவையில்லை — தொடங்கு' },
+  'start.enterName': { en: 'Enter name', ta: 'பெயரை உள்ளிடவும்' },
+  'start.startWithName': { en: 'Start', ta: 'தொடங்கு' },
+  'start.cancel': { en: 'Cancel', ta: 'ரத்து' },
 
   // Team boards (design / print)
   'board.designTitle': { en: 'Idhayam — Design', ta: 'இதயம் — டிசைன்' },

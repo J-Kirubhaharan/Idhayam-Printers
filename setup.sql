@@ -100,6 +100,9 @@ alter table jobs add column if not exists is_urgent boolean not null default fal
 
 -- Assigned employee name (shown on the job board)
 alter table jobs add column if not exists assigned_to text;
+-- separate worker names per team (design floor / print floor)
+alter table jobs add column if not exists design_assignee text;
+alter table jobs add column if not exists print_assignee text;
 
 -- Actual delivered timestamp (auto-stamped when status becomes 'Delivered').
 -- Backfill existing delivered jobs with their last-updated time as a best estimate.
@@ -402,7 +405,9 @@ create table if not exists job_board (
   created_at timestamptz,
   production_stage text,
   needs_design boolean,
-  needs_printing boolean
+  needs_printing boolean,
+  design_assignee text,
+  print_assignee text
 );
 
 create index if not exists idx_job_board_delivery on job_board (delivery_date);
@@ -411,6 +416,8 @@ alter table job_board add column if not exists delivery_time text;
 alter table job_board add column if not exists production_stage text;
 alter table job_board add column if not exists needs_design boolean;
 alter table job_board add column if not exists needs_printing boolean;
+alter table job_board add column if not exists design_assignee text;
+alter table job_board add column if not exists print_assignee text;
 
 alter table job_board enable row level security;
 drop policy if exists "job_board_read" on job_board;
@@ -436,12 +443,12 @@ begin
       id, job_id, customer_name, customer_contact, job_type, custom_job_type,
       paper_size, custom_paper_size, flex_width, flex_height, flex_unit,
       quantity, status, delivery_date, delivery_time, is_urgent, assigned_to, notes, created_at,
-      production_stage, needs_design, needs_printing
+      production_stage, needs_design, needs_printing, design_assignee, print_assignee
     ) values (
       new.id, new.job_id, cust.name, cust.contact, new.job_type, new.custom_job_type,
       new.paper_size, new.custom_paper_size, new.flex_width, new.flex_height, new.flex_unit,
       new.quantity, new.status, new.delivery_date, new.delivery_time, new.is_urgent, new.assigned_to, new.notes, new.created_at,
-      new.production_stage, new.needs_design, new.needs_printing
+      new.production_stage, new.needs_design, new.needs_printing, new.design_assignee, new.print_assignee
     )
     on conflict (id) do update set
       job_id = excluded.job_id,
@@ -464,7 +471,9 @@ begin
       created_at = excluded.created_at,
       production_stage = excluded.production_stage,
       needs_design = excluded.needs_design,
-      needs_printing = excluded.needs_printing;
+      needs_printing = excluded.needs_printing,
+      design_assignee = excluded.design_assignee,
+      print_assignee = excluded.print_assignee;
   else
     delete from job_board where id = new.id;  -- ready/delivered/deleted -> clear from board
   end if;
@@ -498,12 +507,12 @@ insert into job_board (
   id, job_id, customer_name, customer_contact, job_type, custom_job_type,
   paper_size, custom_paper_size, flex_width, flex_height, flex_unit,
   quantity, status, delivery_date, delivery_time, is_urgent, assigned_to, notes, created_at,
-  production_stage, needs_design, needs_printing
+  production_stage, needs_design, needs_printing, design_assignee, print_assignee
 )
 select j.id, j.job_id, c.name, c.contact, j.job_type, j.custom_job_type,
        j.paper_size, j.custom_paper_size, j.flex_width, j.flex_height, j.flex_unit,
        j.quantity, j.status, j.delivery_date, j.delivery_time, j.is_urgent, j.assigned_to, j.notes, j.created_at,
-       j.production_stage, j.needs_design, j.needs_printing
+       j.production_stage, j.needs_design, j.needs_printing, j.design_assignee, j.print_assignee
 from jobs j left join customers c on c.id = j.customer_id
 where j.deleted_at is null and j.status in ('Pending', 'In Progress')
 on conflict (id) do nothing;
@@ -566,7 +575,9 @@ create policy "activity_team_delete" on activity_log
 -- The only way teams change a job's stage. SECURITY DEFINER so design/print
 -- logins need no write access to jobs. Validates role, advances the stage,
 -- and logs the event for the owner's notification bell.
-create or replace function advance_production(p_job uuid, p_action text)
+-- Drop the older 2-arg version so the new signature isn't ambiguous.
+drop function if exists advance_production(uuid, text);
+create or replace function advance_production(p_job uuid, p_action text, p_worker text default null)
 returns text as $$
 declare
   r text;
@@ -574,7 +585,9 @@ declare
   cust_name text;
   new_stage text;
   evt text;
+  worker text;
 begin
+  worker := nullif(btrim(coalesce(p_worker, '')), '');
   select role into r from profiles where id = auth.uid();
   if r is null or r not in ('design','print','owner') then
     raise exception 'Not allowed';
@@ -599,11 +612,14 @@ begin
   end if;
 
   -- starting any stage means the job is now in progress (flips the owner's
-  -- Pending/red dot to In Progress/green everywhere)
+  -- Pending/red dot to In Progress/green everywhere). If the worker gave a name
+  -- at Start, record it on that team's field (a blank name leaves it unchanged).
   update jobs set
     production_stage = new_stage,
     stage_changed_at = now(),
-    status = case when p_action like 'start_%' and status = 'Pending' then 'In Progress' else status end
+    status = case when p_action like 'start_%' and status = 'Pending' then 'In Progress' else status end,
+    design_assignee = case when p_action = 'start_design' and worker is not null then worker else design_assignee end,
+    print_assignee  = case when p_action = 'start_print'  and worker is not null then worker else print_assignee  end
   where id = p_job;
 
   select name into cust_name from customers where id = j.customer_id;

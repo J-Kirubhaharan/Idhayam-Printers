@@ -215,6 +215,17 @@ export default function Notifications() {
     }
   }
 
+  // clear every notification at once: delete all activity rows from the DB and
+  // remember the reminder keys locally so they stay cleared
+  const dismissAll = async () => {
+    const current = items
+    setItems([])
+    const activityIds = current.filter((n) => n.kind === 'activity' && n.id).map((n) => n.id)
+    if (activityIds.length) await supabase.from('activity_log').delete().in('id', activityIds)
+    const reminderKeys = current.filter((n) => n.kind !== 'activity').map((n) => n.key)
+    if (reminderKeys.length) setArr(DISMISS_KEY, [...getArr(DISMISS_KEY), ...reminderKeys])
+  }
+
   return (
     <div className="relative">
       <button onClick={toggle}
@@ -239,9 +250,15 @@ export default function Notifications() {
               transition={{ duration: 0.15 }}
               className="absolute right-0 mt-2 w-80 max-w-[90vw] bg-white rounded-2xl shadow-cardHover border border-ink-50 z-50 overflow-hidden"
             >
-              <div className="px-4 py-3 border-b border-ink-50 flex items-center justify-between">
+              <div className="px-4 py-3 border-b border-ink-50 flex items-center justify-between gap-2">
                 <span className="font-heading font-bold text-ink">Notifications</span>
-                <span className="text-xs text-ink-300">{items.length}</span>
+                <div className="flex items-center gap-3">
+                  {items.length > 0 && (
+                    <button onClick={dismissAll}
+                      className="text-xs font-semibold text-press hover:underline">Clear all</button>
+                  )}
+                  <span className="text-xs text-ink-300">{items.length}</span>
+                </div>
               </div>
               <div className="max-h-[60vh] overflow-y-auto divide-y divide-ink-50">
                 {items.length === 0 ? (
