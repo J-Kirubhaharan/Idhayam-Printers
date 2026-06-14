@@ -5,6 +5,13 @@ import { supabase } from '../lib/supabase'
 import { formatDate, formatDateTime, formatTime12, todayIST } from '../lib/format'
 import EmptyState from '../components/EmptyState'
 import { Skeleton } from '../components/Skeleton'
+import StageBadge from '../components/StageBadge'
+
+// calendar-day key (IST) for grouping by the date the order was taken
+const dayKey = (iso) => {
+  try { return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) }
+  catch { return '' }
+}
 
 export default function OwnerBoard() {
   const [jobs, setJobs] = useState([])
@@ -30,8 +37,19 @@ export default function OwnerBoard() {
     return () => { supabase.removeChannel(channel) }
   }, [])
 
-  const urgentCount = useMemo(() => jobs.filter((j) => j.is_urgent).length, [jobs])
   const today = todayIST()
+  const urgent = useMemo(() => jobs.filter((j) => j.is_urgent), [jobs])
+  // non-urgent jobs grouped by the date they were taken (most recent day first)
+  const byDate = useMemo(() => {
+    const m = new Map()
+    for (const j of jobs) {
+      if (j.is_urgent) continue
+      const k = dayKey(j.created_at)
+      if (!m.has(k)) m.set(k, [])
+      m.get(k).push(j)
+    }
+    return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([day, list]) => ({ day, list }))
+  }, [jobs])
 
   // list of names already used, for quick re-assigning
   const names = useMemo(
@@ -70,14 +88,39 @@ export default function OwnerBoard() {
           <EmptyState icon="✅" title="No active jobs" message="New jobs appear here and on the employee screens instantly." />
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          <AnimatePresence>
-            {jobs.map((j) => (
-              <OwnerJobCard key={j.id} job={j} today={today} onUpdate={updateJob} />
-            ))}
-          </AnimatePresence>
+        <div className="space-y-8">
+          {urgent.length > 0 && (
+            <section>
+              <SectionHeader title="⚡ Urgent" count={urgent.length} accent />
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                <AnimatePresence>
+                  {urgent.map((j) => <OwnerJobCard key={j.id} job={j} today={today} onUpdate={updateJob} />)}
+                </AnimatePresence>
+              </div>
+            </section>
+          )}
+          {byDate.map((g) => (
+            <section key={g.day}>
+              <SectionHeader title={g.day === today ? 'Today' : formatDate(g.list[0].created_at)} count={g.list.length} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                <AnimatePresence>
+                  {g.list.map((j) => <OwnerJobCard key={j.id} job={j} today={today} onUpdate={updateJob} />)}
+                </AnimatePresence>
+              </div>
+            </section>
+          ))}
         </div>
       )}
+    </div>
+  )
+}
+
+function SectionHeader({ title, count, accent }) {
+  return (
+    <div className="flex items-center gap-3 mb-3">
+      <h2 className={`font-heading font-bold text-lg ${accent ? 'text-press' : 'text-ink'}`}>{title}</h2>
+      <span className={`pill ${accent ? 'bg-press text-white' : 'bg-ink-100/70 text-ink'}`}>{count}</span>
+      <div className="flex-1 h-px bg-ink-100/70" />
     </div>
   )
 }
@@ -115,10 +158,25 @@ function OwnerJobCard({ job, today, onUpdate }) {
       <div className="p-5">
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="font-mono text-sm text-ink-400">{job.job_id}</div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
             {job.is_urgent && <span className="pill bg-press text-white">⚡ URGENT</span>}
             <span className="pill bg-ink-50 text-ink-400">{job.status}</span>
           </div>
+        </div>
+
+        {/* live production stage (Design / Print pipeline) */}
+        {job.production_stage && job.production_stage !== 'None' && (
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs text-ink-300">Status</span>
+            <StageBadge stage={job.production_stage} />
+          </div>
+        )}
+
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xs text-ink-300">Assigned to</span>
+          {job.assigned_to
+            ? <span className="pill bg-ink text-white">👤 {job.assigned_to}</span>
+            : <span className="pill bg-ink-50 text-ink-400">None</span>}
         </div>
 
         <div className="font-heading font-bold text-lg text-ink leading-tight">{jobType}</div>

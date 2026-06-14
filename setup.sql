@@ -127,10 +127,14 @@ alter table jobs add column if not exists production_stage text;
 alter table jobs drop constraint if exists jobs_stage_check;
 alter table jobs add constraint jobs_stage_check check (
   production_stage is null or production_stage in
-  ('Design Queue','Designing','Print Queue','Printing','Done','None')
+  ('Design Queue','Designing','Design finished','Print Queue','Printing','Print finished','Done','None')
 );
 -- existing rows predate the pipeline -> keep them out of the team queues
 update jobs set production_stage = 'None' where production_stage is null;
+
+-- when the production stage last changed (drives the 10-min auto-advance:
+-- Design finished -> Print Queue, Print finished -> Job done)
+alter table jobs add column if not exists stage_changed_at timestamptz;
 
 -- Auto-update updated_at, and stamp/clear delivered_at on status change
 create or replace function set_updated_at()
@@ -579,6 +583,8 @@ begin
   select * into j from jobs where id = p_job and deleted_at is null;
   if not found then raise exception 'Job not found'; end if;
 
+  -- All transitions are immediate. Design finish hands straight over to printing
+  -- (or completes the job if there's no printing); print finish completes the job.
   if p_action = 'start_design' and j.production_stage = 'Design Queue' then
     new_stage := 'Designing'; evt := 'Design started';
   elsif p_action = 'finish_design' and j.production_stage = 'Designing' then
@@ -592,14 +598,20 @@ begin
     raise exception 'Invalid action % for stage %', p_action, j.production_stage;
   end if;
 
-  update jobs set production_stage = new_stage where id = p_job;
+  -- starting any stage means the job is now in progress (flips the owner's
+  -- Pending/red dot to In Progress/green everywhere)
+  update jobs set
+    production_stage = new_stage,
+    stage_changed_at = now(),
+    status = case when p_action like 'start_%' and status = 'Pending' then 'In Progress' else status end
+  where id = p_job;
 
   select name into cust_name from customers where id = j.customer_id;
   -- the owner sees the production event with its proper wording
   insert into activity_log (job_id, job_code, customer_name, event, actor, target)
     values (p_job, j.job_id, coalesce(cust_name, '-'), evt, r, 'owner');
 
-  -- when design hands a job to printing, alert the print team that work arrived
+  -- design handed straight to printing -> alert the print team immediately
   if p_action = 'finish_design' and new_stage = 'Print Queue' then
     insert into activity_log (job_id, job_code, customer_name, event, actor, target)
       values (p_job, j.job_id, coalesce(cust_name, '-'), 'New printing job arrived', r, 'print');
@@ -608,6 +620,52 @@ begin
   return new_stage;
 end;
 $$ language plpgsql security definer;
+
+-- Employees on the staff board can Start a job (Pending -> In Progress) without any
+-- access to money. Validated by role, runs as definer so the board + main-page
+-- counter update instantly, and logs the event for the owner's bell.
+create or replace function set_job_status(p_job uuid, p_status text)
+returns text as $$
+declare
+  r text;
+  j jobs%rowtype;
+  cust_name text;
+begin
+  select role into r from profiles where id = auth.uid();
+  if r is null or r not in ('employee','owner') then
+    raise exception 'Not allowed';
+  end if;
+  if p_status not in ('In Progress') then
+    raise exception 'Invalid status %', p_status;
+  end if;
+
+  select * into j from jobs where id = p_job and deleted_at is null;
+  if not found then raise exception 'Job not found'; end if;
+  if j.status = p_status then return p_status; end if;
+
+  update jobs set status = p_status, updated_at = now() where id = p_job;
+
+  select name into cust_name from customers where id = j.customer_id;
+  insert into activity_log (job_id, job_code, customer_name, event, actor, target)
+    values (p_job, j.job_id, coalesce(cust_name, '-'), 'Work started', r, 'owner');
+  return p_status;
+end;
+$$ language plpgsql security definer;
+
+-- No background delay any more: every stage transition is immediate. Keep a no-op
+-- auto_advance_stages so any already-open board that still calls it won't error.
+create or replace function auto_advance_stages()
+returns void as $$
+begin
+  return;
+end;
+$$ language plpgsql security definer;
+
+-- One-time flush: move any jobs stuck in the old delayed 'finished' states onward.
+update jobs set production_stage = case when needs_printing then 'Print Queue' else 'Done' end
+where production_stage = 'Design finished' and deleted_at is null;
+update jobs set production_stage = 'Done'
+where production_stage = 'Print finished' and deleted_at is null;
 
 -- realtime so the owner's bell lights up the instant a team acts
 do $$

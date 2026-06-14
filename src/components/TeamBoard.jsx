@@ -14,6 +14,7 @@ const CONFIG = {
   design: {
     titleKey: 'board.designTitle',
     accent: 'bg-press',
+    // design finish hands straight to the print queue (no resting stage)
     stages: ['Design Queue', 'Designing'],
     button: {
       'Design Queue': { action: 'start_design', cls: 'bg-ink hover:bg-ink-600' },
@@ -23,6 +24,7 @@ const CONFIG = {
   print: {
     titleKey: 'board.printTitle',
     accent: 'bg-ink',
+    // print finish completes the job immediately (no resting stage)
     stages: ['Print Queue', 'Printing'],
     button: {
       'Print Queue': { action: 'start_print', cls: 'bg-ink hover:bg-ink-600' },
@@ -34,8 +36,16 @@ const CONFIG = {
 const STAGE_PILL = {
   'Design Queue': 'bg-amber_warn/15 text-amber_warn',
   'Designing': 'bg-press/15 text-press',
+  'Design finished': 'bg-leaf/15 text-leaf',
   'Print Queue': 'bg-amber_warn/15 text-amber_warn',
-  'Printing': 'bg-ink-100/60 text-ink'
+  'Printing': 'bg-ink-100/60 text-ink',
+  'Print finished': 'bg-leaf/15 text-leaf'
+}
+
+// calendar-day key (IST) for grouping by the date the order was taken
+const dayKey = (iso) => {
+  try { return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) }
+  catch { return '' }
 }
 
 export default function TeamBoard({ team }) {
@@ -78,8 +88,19 @@ export default function TeamBoard({ team }) {
     fetchBoard()
   }
 
-  const urgentCount = useMemo(() => jobs.filter((j) => j.is_urgent).length, [jobs])
   const today = todayIST()
+  const urgent = useMemo(() => jobs.filter((j) => j.is_urgent), [jobs])
+  const urgentCount = urgent.length
+  const byDate = useMemo(() => {
+    const m = new Map()
+    for (const j of jobs) {
+      if (j.is_urgent) continue
+      const k = dayKey(j.created_at)
+      if (!m.has(k)) m.set(k, [])
+      m.get(k).push(j)
+    }
+    return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([day, list]) => ({ day, list }))
+  }, [jobs])
 
   return (
     <div className="min-h-screen bg-paper flex flex-col">
@@ -128,15 +149,40 @@ export default function TeamBoard({ team }) {
             <div className="text-ink-300">{t('board.workAppears')}</div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
-            <AnimatePresence>
-              {jobs.map((j) => (
-                <Card key={j.id} job={j} today={today} cfg={cfg} busy={busyId === j.id} onAdvance={() => advance(j)} />
-              ))}
-            </AnimatePresence>
+          <div className="space-y-8">
+            {urgent.length > 0 && (
+              <section>
+                <SectionHeader title={`⚡ ${t('board.urgent')}`} count={urgent.length} accent />
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
+                  <AnimatePresence>
+                    {urgent.map((j) => <Card key={j.id} job={j} today={today} cfg={cfg} busy={busyId === j.id} onAdvance={() => advance(j)} />)}
+                  </AnimatePresence>
+                </div>
+              </section>
+            )}
+            {byDate.map((g) => (
+              <section key={g.day}>
+                <SectionHeader title={g.day === today ? t('board.today') : formatDate(g.list[0].created_at)} count={g.list.length} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
+                  <AnimatePresence>
+                    {g.list.map((j) => <Card key={j.id} job={j} today={today} cfg={cfg} busy={busyId === j.id} onAdvance={() => advance(j)} />)}
+                  </AnimatePresence>
+                </div>
+              </section>
+            ))}
           </div>
         )}
       </main>
+    </div>
+  )
+}
+
+function SectionHeader({ title, count, accent }) {
+  return (
+    <div className="flex items-center gap-3 mb-3">
+      <h2 className={`font-heading font-bold text-lg ${accent ? 'text-press' : 'text-ink'}`}>{title}</h2>
+      <span className={`pill ${accent ? 'bg-press text-white' : 'bg-ink-100/70 text-ink'}`}>{count}</span>
+      <div className="flex-1 h-px bg-ink-100/70" />
     </div>
   )
 }
@@ -173,13 +219,18 @@ function Card({ job, today, cfg, busy, onAdvance }) {
       <div className="p-5">
         {/* Tappable summary area */}
         <div className="cursor-pointer select-none" onClick={() => setExpanded((v) => !v)}>
-          <div className="flex items-start justify-between gap-2 mb-3">
+          <div className="flex items-start justify-between gap-2 mb-2">
             <div className="font-mono text-sm text-ink-400">{job.job_id}</div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap justify-end">
               {job.is_urgent && <span className="pill bg-press text-white animate-pulse">⚡ URGENT</span>}
               <span className={`pill ${STAGE_PILL[job.production_stage] || 'bg-ink-50 text-ink-400'}`}>{t(`pstage.${job.production_stage}`)}</span>
             </div>
           </div>
+
+          {/* Assigned employee — highlighted at the top */}
+          {job.assigned_to && (
+            <div className="mb-2"><span className="pill bg-ink text-white text-sm">👤 {job.assigned_to}</span></div>
+          )}
 
           <div className="font-heading font-bold text-xl text-ink leading-tight">{jobType}</div>
           <div className="text-sm text-ink-400 mb-3">

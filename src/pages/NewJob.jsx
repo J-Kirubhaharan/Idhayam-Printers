@@ -57,6 +57,7 @@ export default function NewJob() {
   const [showSuggest, setShowSuggest] = useState(false)
   const [busy, setBusy] = useState(false)
   const restored = useRef(false)
+  const submitting = useRef(false)  // blocks the auto-save once an order is being created
   // how the customer was resolved (set when leaving step 1): { customerId: <id|'new'>, updateContactTo?: phone }
   const [resolution, setResolution] = useState(null)
   // a pending same-person / different-person question to ask before continuing
@@ -113,28 +114,35 @@ export default function NewJob() {
       return
     }
 
-    // restore draft
+    // restore draft — only if it was saved very recently (an accidental navigate
+    // away), so old/abandoned entries never resurface on a fresh New Job
     if (!restored.current) {
       restored.current = true
       try {
         const raw = localStorage.getItem(DRAFT_KEY)
         if (raw) {
           const draft = JSON.parse(raw)
+          const fresh = draft?._savedAt && (Date.now() - draft._savedAt) < 30 * 60 * 1000  // 30 min
           const hasContent = draft?.customerName?.trim() ||
             (draft?.items || []).some((it) => it.jobType || it.quantity || it.rate)
-          if (hasContent) {
+          if (fresh && hasContent) {
             setForm({ ...emptyForm, ...draft, items: draft.items?.length ? draft.items : [emptyItem()] })
             toast('Draft restored', { icon: '📝' })
+          } else {
+            localStorage.removeItem(DRAFT_KEY)  // stale — start clean
           }
         }
       } catch { /* ignore */ }
     }
   }, [location.state])
 
-  // auto-save draft
+  // auto-save draft (skip once we're submitting, so a finished order can't be re-saved)
   useEffect(() => {
-    if (!restored.current) return
-    const id = setTimeout(() => localStorage.setItem(DRAFT_KEY, JSON.stringify(form)), 400)
+    if (!restored.current || submitting.current) return
+    const id = setTimeout(() => {
+      if (submitting.current) return
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...form, _savedAt: Date.now() }))
+    }, 400)
     return () => clearTimeout(id)
   }, [form])
 
@@ -242,6 +250,8 @@ export default function NewJob() {
     if (isCredit && (Number(form.paidNow) || 0) > netTotal) {
       return toast.error('Amount paid now cannot exceed the total')
     }
+    submitting.current = true   // stop the auto-save from re-creating the draft
+    localStorage.removeItem(DRAFT_KEY)
     setBusy(true)
     try {
       // 1. Resolve the customer using the decision captured when leaving step 1
@@ -373,6 +383,7 @@ export default function NewJob() {
       navigate(`/order/${orderGroup}`)
     } catch (err) {
       console.error(err)
+      submitting.current = false   // failed — allow editing & draft-saving again
       toast.error(err.message || 'Could not save order')
     } finally {
       setBusy(false)

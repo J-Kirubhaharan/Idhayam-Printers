@@ -5,7 +5,7 @@ const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
-  const [role, setRole] = useState(null) // 'owner' | 'employee'
+  const [role, setRole] = useState(null) // 'owner' | 'design' | 'print'
   const [loading, setLoading] = useState(true)
 
   const loadRole = async (s) => {
@@ -40,7 +40,6 @@ export function AuthProvider({ children }) {
       session,
       user: session?.user ?? null,
       role,
-      isEmployee: role === 'employee',
       isDesign: role === 'design',
       isPrint: role === 'print',
       loading,

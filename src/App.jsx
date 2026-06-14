@@ -20,7 +20,6 @@ import Expenses from './pages/Expenses'
 import DailySummary from './pages/DailySummary'
 import Reports from './pages/Reports'
 import Quotation from './pages/Quotation'
-import EmployeeBoard from './pages/EmployeeBoard'
 import OwnerBoard from './pages/OwnerBoard'
 import DesignBoard from './pages/DesignBoard'
 import PrintBoard from './pages/PrintBoard'
@@ -28,11 +27,11 @@ import PrintBoard from './pages/PrintBoard'
 export default function App() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { isEmployee, isDesign, isPrint } = useAuth()
+  const { isDesign, isPrint } = useAuth()
 
   // Global keyboard shortcuts (owner only): N = new job, E = existing jobs
   useEffect(() => {
-    if (isEmployee) return
+    if (isDesign || isPrint) return
     const onKey = (e) => {
       const tag = (e.target?.tagName || '').toLowerCase()
       if (['input', 'textarea', 'select'].includes(tag) || e.target?.isContentEditable) return
@@ -42,19 +41,14 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [navigate, isEmployee])
+  }, [navigate, isDesign, isPrint])
 
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
         <Route path="/login" element={<Login />} />
         <Route element={<ProtectedRoute />}>
-          {isEmployee ? (
-            <>
-              <Route path="/board" element={<EmployeeBoard />} />
-              <Route path="*" element={<Navigate to="/board" replace />} />
-            </>
-          ) : isDesign ? (
+          {isDesign ? (
             <>
               <Route path="/design-board" element={<DesignBoard />} />
               <Route path="*" element={<Navigate to="/design-board" replace />} />
