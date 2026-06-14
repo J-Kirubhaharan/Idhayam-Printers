@@ -4,16 +4,17 @@ import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 import toast from 'react-hot-toast'
 import { supabase } from '../lib/supabase'
-import { formatINR, formatDate, formatTime12, paymentStatusOf } from '../lib/format'
+import { formatINR, formatDate, formatTime12, formatTimeIST, paymentStatusOf } from '../lib/format'
 import { Skeleton } from '../components/Skeleton'
 import WhatsAppButton from '../components/WhatsAppButton'
 import { buildOrderGroupMessage } from '../lib/whatsapp'
 import ShopLogo from '../components/ShopLogo'
+import { PhoneBadge, PinBadge, MailBadge } from '../components/ContactBadges'
 
 const SHOP = {
   name: 'Idhayam Printers',
-  address: 'Police Station Stop, Kalaiyarkovil - 626745',
-  phones: '+91 63818 40450 · +91 99420 24958',
+  address: 'Near Police Station, Kalaiyarkoil, Sivaganga - 630551, Tamil Nadu',
+  phones: '+91 70949 46595 · +91 63818 40450 · +91 84281 08001',
   email: 'idhayamoffsetkkoil@gmail.com'
 }
 
@@ -91,10 +92,15 @@ export default function OrderInvoice() {
 
   const cust = jobs[0]?.customers
   // the bill number is the shared base, e.g. IPO-2026-011 (strip any -1/-2 item suffix)
-  const billNo = (jobs[0]?.job_id || '').replace(/-\d+$/, '')
-  const grandTotal = jobs.reduce((s, j) => s + Number(j.total_amount), 0)
+  const billNo = (() => {
+    const p = (jobs[0]?.job_id || '').split('-')
+    return p.length > 3 ? p.slice(0, 3).join('-') : (jobs[0]?.job_id || '')
+  })()
+  const subTotal = jobs.reduce((s, j) => s + Number(j.total_amount), 0)
+  const discount = jobs.reduce((s, j) => s + (Number(j.discount) || 0), 0)
+  const grandTotal = Math.max(0, subTotal - discount)
   const balance = Math.max(0, grandTotal - paid)
-  const payStatus = paymentStatusOf({ payment_type: jobs[0]?.payment_type, total_amount: grandTotal }, paid)
+  const payStatus = paymentStatusOf({ total_amount: grandTotal }, paid)
 
   const sizeOf = (j) => j.job_type === 'Flex' && (j.flex_width || j.flex_height)
     ? `${j.flex_width} × ${j.flex_height} ${j.flex_unit}`
@@ -120,9 +126,15 @@ export default function OrderInvoice() {
       <div id="invoice-printable" ref={printRef}
         className="bg-white shadow-card mx-auto flex flex-col"
         style={{ width: '794px', minHeight: '1123px' }}>
-        {/* Top: logo + INVOICE wordmark */}
-        <div className="px-9 pt-9 pb-7 flex items-start justify-between gap-6">
-          <ShopLogo size={104} />
+        {/* Top: logo + shop name (left), INVOICE wordmark (right) */}
+        <div className="px-9 pt-9 pb-7 flex items-center justify-between gap-6">
+          <div className="flex items-center gap-4">
+            <ShopLogo size={88} />
+            <div>
+              <div className="font-heading font-extrabold text-3xl text-ink leading-none">Idhayam</div>
+              <div className="text-base tracking-[0.28em] text-press font-bold mt-1">PRINTERS</div>
+            </div>
+          </div>
           <h1 className="font-heading font-extrabold text-5xl tracking-[0.18em] text-charcoal leading-none">INVOICE</h1>
         </div>
 
@@ -142,7 +154,12 @@ export default function OrderInvoice() {
           </div>
           <div className="text-sm self-start">
             <MetaRow label="Invoice No" value={billNo} />
-            <MetaRow label="Invoice Date" value={formatDate(jobs[0]?.created_at)} />
+            <MetaRow label="Invoice Date" value={
+              <span className="inline-flex flex-col items-end leading-tight">
+                <span>{formatDate(jobs[0]?.created_at)}</span>
+                <span className="text-gray-500 font-normal text-xs">{formatTimeIST(jobs[0]?.created_at)}</span>
+              </span>
+            } />
             <div className="border-t border-gray-200 my-3" />
             <MetaRow label="Payment Method" value={jobs[0]?.payment_type} />
             {jobs[0]?.delivery_date && (
@@ -196,8 +213,14 @@ export default function OrderInvoice() {
           <div className="text-sm">
             <div className="flex justify-between py-2 border-b border-gray-200">
               <span className="text-gray-500">Sub Total</span>
-              <span className="font-mono">{formatINR(grandTotal)}</span>
+              <span className="font-mono">{formatINR(subTotal)}</span>
             </div>
+            {discount > 0 && (
+              <div className="flex justify-between py-2 border-b border-gray-200">
+                <span className="text-gray-500">Discount</span>
+                <span className="font-mono text-press">− {formatINR(discount)}</span>
+              </div>
+            )}
             <div className="flex justify-between py-2 border-b border-gray-200">
               <span className="text-gray-500">Paid</span>
               <span className="font-mono text-leaf">{formatINR(paid)}</span>
@@ -221,9 +244,9 @@ export default function OrderInvoice() {
 
         {/* Footer band */}
         <div className="mt-9 bg-charcoal text-white px-9 py-5 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2"><span>📞</span><span>{SHOP.phones}</span></div>
-          <div className="flex items-center gap-2"><span>📍</span><span>{SHOP.address}</span></div>
-          <div className="flex items-center gap-2"><span>✉️</span><span>{SHOP.email}</span></div>
+          <div className="flex items-center gap-2"><PhoneBadge /><span>{SHOP.phones}</span></div>
+          <div className="flex items-center gap-2"><PinBadge /><span>{SHOP.address}</span></div>
+          <div className="flex items-center gap-2"><MailBadge /><span>{SHOP.email}</span></div>
         </div>
       </div>
       </div>

@@ -9,8 +9,8 @@ import ShopLogo from '../components/ShopLogo'
 
 const SHOP = {
   name: 'Idhayam Printers',
-  address: 'Police Station Stop, Kalaiyarkovil - 626745',
-  phones: '+91 63818 40450 · +91 99420 24958',
+  address: 'Near Police Station, Kalaiyarkoil, Sivaganga - 630551, Tamil Nadu',
+  phones: '+91 70949 46595 · +91 63818 40450 · +91 84281 08001',
   email: 'idhayamoffsetkkoil@gmail.com'
 }
 
@@ -230,11 +230,6 @@ export default function Quotation() {
             <div className="border-t border-gray-300 mt-3" />
           </div>
           <div className="text-sm">
-            <div className="text-right">
-              <div className="text-gray-500">Total Due:</div>
-              <div className="font-heading font-bold text-2xl text-press">{formatINR(grandTotal)}</div>
-            </div>
-            <div className="border-t border-gray-300 my-3" />
             <div className="flex justify-between gap-4 py-0.5"><span className="text-gray-500">Quotation #</span><span className="font-medium text-charcoal">{quoteNo}</span></div>
             <div className="flex justify-between gap-4 py-0.5"><span className="text-gray-500">Date</span><span className="font-medium text-charcoal">{formatDate(date)}</span></div>
             {validUntil && <div className="flex justify-between gap-4 py-0.5"><span className="text-gray-500">Valid Till</span><span className="font-medium text-charcoal">{formatDate(validUntil)}</span></div>}

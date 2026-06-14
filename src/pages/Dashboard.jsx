@@ -53,15 +53,15 @@ export default function Dashboard() {
     setLoading(false)
   }
 
-  // remaining balance across all jobs = total - payments already made
+  // remaining balance across all jobs = total - discount - payments already made
   const loadPendingCredit = async () => {
-    const { data: jobs } = await supabase.from('jobs').select('id,total_amount').is('deleted_at', null)
+    const { data: jobs } = await supabase.from('jobs').select('id,total_amount,discount').is('deleted_at', null)
     if (!jobs?.length) return 0
     const ids = jobs.map((j) => j.id)
     const { data: pays } = await supabase.from('payments').select('job_id,amount').in('job_id', ids)
     const paidByJob = {}
     ;(pays || []).forEach((p) => { paidByJob[p.job_id] = (paidByJob[p.job_id] || 0) + Number(p.amount) })
-    return jobs.reduce((s, j) => s + Math.max(0, Number(j.total_amount) - (paidByJob[j.id] || 0)), 0)
+    return jobs.reduce((s, j) => s + Math.max(0, Number(j.total_amount) - (Number(j.discount) || 0) - (paidByJob[j.id] || 0)), 0)
   }
 
   const actions = [

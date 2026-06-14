@@ -4,15 +4,16 @@ import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 import toast from 'react-hot-toast'
 import { supabase } from '../lib/supabase'
-import { formatINR, formatDate, formatTime12, paymentStatusOf } from '../lib/format'
+import { formatINR, formatDate, formatTime12, formatTimeIST, paymentStatusOf } from '../lib/format'
 import { Skeleton } from '../components/Skeleton'
 import WhatsAppButton from '../components/WhatsAppButton'
 import ShopLogo from '../components/ShopLogo'
+import { PhoneBadge, PinBadge, MailBadge } from '../components/ContactBadges'
 
 const SHOP = {
   name: 'Idhayam Printers',
-  address: 'Police Station Stop, Kalaiyarkovil - 626745',
-  phones: '+91 63818 40450 · +91 99420 24958',
+  address: 'Near Police Station, Kalaiyarkoil, Sivaganga - 630551, Tamil Nadu',
+  phones: '+91 70949 46595 · +91 63818 40450 · +91 84281 08001',
   email: 'idhayamoffsetkkoil@gmail.com'
 }
 
@@ -90,7 +91,9 @@ export default function Invoice() {
   const sizeLabel = job.job_type === 'Flex' && (job.flex_width || job.flex_height)
     ? `${job.flex_width} × ${job.flex_height} ${job.flex_unit}`
     : (paperSize || '')
-  const balance = Math.max(0, Number(job.total_amount) - paid)
+  const discount = Number(job.discount) || 0
+  const netTotal = Math.max(0, Number(job.total_amount) - discount)
+  const balance = Math.max(0, netTotal - paid)
   const payStatus = paymentStatusOf(job, paid)
 
   return (
@@ -112,9 +115,15 @@ export default function Invoice() {
       <div id="invoice-printable" ref={printRef}
         className="bg-white shadow-card mx-auto flex flex-col"
         style={{ width: '794px', minHeight: '1123px' }}>
-        {/* Top: logo + INVOICE wordmark */}
-        <div className="px-9 pt-9 pb-7 flex items-start justify-between gap-6">
-          <ShopLogo size={104} />
+        {/* Top: logo + shop name (left), INVOICE wordmark (right) */}
+        <div className="px-9 pt-9 pb-7 flex items-center justify-between gap-6">
+          <div className="flex items-center gap-4">
+            <ShopLogo size={88} />
+            <div>
+              <div className="font-heading font-extrabold text-3xl text-ink leading-none">Idhayam</div>
+              <div className="text-base tracking-[0.28em] text-press font-bold mt-1">PRINTERS</div>
+            </div>
+          </div>
           <h1 className="font-heading font-extrabold text-5xl tracking-[0.18em] text-charcoal leading-none">INVOICE</h1>
         </div>
 
@@ -134,7 +143,12 @@ export default function Invoice() {
           </div>
           <div className="text-sm self-start">
             <MetaRow label="Invoice No" value={job.job_id} />
-            <MetaRow label="Invoice Date" value={formatDate(job.created_at)} />
+            <MetaRow label="Invoice Date" value={
+              <span className="inline-flex flex-col items-end leading-tight">
+                <span>{formatDate(job.created_at)}</span>
+                <span className="text-gray-500 font-normal text-xs">{formatTimeIST(job.created_at)}</span>
+              </span>
+            } />
             <div className="border-t border-gray-200 my-3" />
             <MetaRow label="Payment Method" value={job.payment_type} />
             {job.delivery_date && (
@@ -186,13 +200,19 @@ export default function Invoice() {
               <span className="text-gray-500">Sub Total</span>
               <span className="font-mono">{formatINR(job.total_amount)}</span>
             </div>
+            {discount > 0 && (
+              <div className="flex justify-between py-2 border-b border-gray-200">
+                <span className="text-gray-500">Discount</span>
+                <span className="font-mono text-press">− {formatINR(discount)}</span>
+              </div>
+            )}
             <div className="flex justify-between py-2 border-b border-gray-200">
               <span className="text-gray-500">Paid</span>
               <span className="font-mono text-leaf">{formatINR(paid)}</span>
             </div>
             <div className="flex justify-between items-center bg-charcoal text-white px-4 py-3 mt-2 rounded-md">
               <span className="font-bold tracking-wide">TOTAL</span>
-              <span className="font-mono font-bold text-lg">{formatINR(job.total_amount)}</span>
+              <span className="font-mono font-bold text-lg">{formatINR(netTotal)}</span>
             </div>
           </div>
         </div>
@@ -209,9 +229,9 @@ export default function Invoice() {
 
         {/* Footer band */}
         <div className="mt-9 bg-charcoal text-white px-9 py-5 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2"><span>📞</span><span>{SHOP.phones}</span></div>
-          <div className="flex items-center gap-2"><span>📍</span><span>{SHOP.address}</span></div>
-          <div className="flex items-center gap-2"><span>✉️</span><span>{SHOP.email}</span></div>
+          <div className="flex items-center gap-2"><PhoneBadge /><span>{SHOP.phones}</span></div>
+          <div className="flex items-center gap-2"><PinBadge /><span>{SHOP.address}</span></div>
+          <div className="flex items-center gap-2"><MailBadge /><span>{SHOP.email}</span></div>
         </div>
       </div>
       </div>

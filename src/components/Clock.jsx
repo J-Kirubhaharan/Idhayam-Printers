@@ -28,7 +28,7 @@ export default function Clock() {
         <span className="font-mono text-sm font-bold text-press">{ampm}</span>
       </div>
       <div className="text-xs font-medium text-ink-400 mt-0.5">{date}</div>
-      <div className="text-[10px] uppercase tracking-[0.25em] text-ink-300 mt-0.5">Kalaiyarkovil</div>
+      <div className="text-[10px] uppercase tracking-[0.25em] text-ink-300 mt-0.5">Kalaiyarkoil</div>
     </div>
   )
 }

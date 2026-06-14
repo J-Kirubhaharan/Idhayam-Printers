@@ -1,6 +1,6 @@
 # Idhayam Printers
 
-Job & billing management web app for **Idhayam Printers**, Police Station Stop, Kalaiyarkovil - 626745.
+Job & billing management web app for **Idhayam Printers**, Near Police Station, Kalaiyarkoil, Sivaganga - 630551, Tamil Nadu.
 
 Stack: **React + Vite + Tailwind + Framer Motion + Recharts + Supabase + PWA**.
 

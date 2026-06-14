@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
@@ -9,15 +9,25 @@ import StatusBadge, { PaymentBadge, PaymentStatusBadge } from '../components/Sta
 import { SkeletonRow } from '../components/Skeleton'
 import EmptyState from '../components/EmptyState'
 import ShopLogo from '../components/ShopLogo'
+import JobDetailPanel from '../components/JobDetailPanel'
 
-// the bill number is the shared base, e.g. IPO-2026-011 (strip any -1/-2 item suffix)
-const billNoOf = (jobId) => (jobId || '').replace(/-\d+$/, '')
+// the bill number is the shared base, e.g. IPO-2026-011 (strip only the -1/-2 item
+// suffix on multi-item orders; a plain IPO-YYYY-NNN id is kept as-is)
+const billNoOf = (jobId) => {
+  const p = (jobId || '').split('-')
+  return p.length > 3 ? p.slice(0, 3).join('-') : (jobId || '')
+}
 // numeric sort key from a bill id: IPO-2026-011 -> 2026 * 100000 + 11
 const sortKeyOf = (billNo) => {
   const p = billNo.split('-')
   const yr = parseInt(p[1], 10) || 0
   const num = parseInt(p[2], 10) || 0
   return yr * 100000 + num
+}
+// calendar-day key (IST) for grouping, e.g. "2026-06-12"
+const dayKey = (iso) => {
+  try { return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) }
+  catch { return '' }
 }
 
 export default function AllOrders() {
@@ -28,7 +38,9 @@ export default function AllOrders() {
   const [paidByJob, setPaidByJob] = useState({})
   const [query, setQuery] = useState('')
   const [newestFirst, setNewestFirst] = useState(true)
+  const [groupByDate, setGroupByDate] = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const [selectedJob, setSelectedJob] = useState(null)
 
   useEffect(() => { load() }, [])
 
@@ -58,7 +70,9 @@ export default function AllOrders() {
       items.sort((a, b) => (a.job_id || '').localeCompare(b.job_id || ''))
       const first = items[0]
       const billNo = billNoOf(first.job_id)
-      const amount = items.reduce((s, j) => s + Number(j.total_amount), 0)
+      const gross = items.reduce((s, j) => s + Number(j.total_amount), 0)
+      const discount = items.reduce((s, j) => s + (Number(j.discount) || 0), 0)
+      const amount = Math.max(0, gross - discount)  // net of any discount
       const paid = items.reduce((s, j) => s + (paidByJob[j.id] || 0), 0)
       const statuses = [...new Set(items.map((j) => j.status))]
       const types = items.map((j) => (j.job_type === 'Other' ? j.custom_job_type : j.job_type))
@@ -80,7 +94,11 @@ export default function AllOrders() {
         sortKey: sortKeyOf(billNo)
       })
     }
-    list.sort((a, b) => newestFirst ? b.sortKey - a.sortKey : a.sortKey - b.sortKey)
+    list.sort((a, b) => {
+      const da = new Date(a.date).getTime(), db = new Date(b.date).getTime()
+      if (da !== db) return newestFirst ? db - da : da - db
+      return newestFirst ? b.sortKey - a.sortKey : a.sortKey - b.sortKey  // same day → bill order
+    })
     return list
   }, [jobs, paidByJob, newestFirst])
 
@@ -94,7 +112,39 @@ export default function AllOrders() {
     })
   }, [orders, query])
 
-  const openOrder = (o) => navigate(o.order_group ? `/order/${o.order_group}` : `/invoice/${o.firstId}`)
+  // open the slide-in detail/edit panel for the order's job
+  const openOrder = async (o) => {
+    const { data } = await supabase
+      .from('jobs').select('*, customers(name,contact,alt_contact,place)')
+      .eq('id', o.firstId).is('deleted_at', null).maybeSingle()
+    if (data) setSelectedJob(data)
+    else toast('That order is no longer available.')
+  }
+
+  const refreshSelected = async () => {
+    await load()  // edits/deletes change the register
+    if (!selectedJob) return
+    const { data } = await supabase
+      .from('jobs').select('*, customers(name,contact,alt_contact,place)')
+      .eq('id', selectedJob.id).is('deleted_at', null).maybeSingle()
+    setSelectedJob(data || null)
+  }
+
+  // orders grouped under their date (for the "By date" view); keeps the chosen order
+  const dateGroups = useMemo(() => {
+    const m = new Map()
+    for (const o of filtered) {
+      const k = dayKey(o.date)
+      if (!m.has(k)) m.set(k, [])
+      m.get(k).push(o)
+    }
+    return [...m.entries()].map(([day, list]) => ({
+      day,
+      label: formatDate(list[0].date),
+      list,
+      total: list.reduce((s, o) => s + o.amount, 0)
+    }))
+  }, [filtered])
 
   // totals for the rows currently shown (respects search)
   const totals = useMemo(() => {
@@ -154,6 +204,10 @@ export default function AllOrders() {
           className="px-3.5 py-2.5 rounded-xl text-sm font-semibold bg-white text-ink border border-ink-100 hover:bg-ink-50 whitespace-nowrap">
           {newestFirst ? '↓ Newest first' : '↑ Oldest first'}
         </button>
+        <button onClick={() => setGroupByDate((v) => !v)}
+          className={`px-3.5 py-2.5 rounded-xl text-sm font-semibold border whitespace-nowrap transition-colors ${groupByDate ? 'bg-ink text-white border-ink' : 'bg-white text-ink border-ink-100 hover:bg-ink-50'}`}>
+          {groupByDate ? '📅 By date ✓' : '📅 By date'}
+        </button>
         <button onClick={handleDownload} disabled={downloading || filtered.length === 0}
           className="btn-accent whitespace-nowrap disabled:opacity-50">
           {downloading ? 'Generating…' : '⬇ Download PDF'}
@@ -187,31 +241,24 @@ export default function AllOrders() {
                       action={!query && <button className="btn-accent" onClick={() => navigate('/new-job')}>New Job</button>} />
                   </td>
                 </tr>
-              ) : (
-                filtered.map((o) => (
-                  <tr key={o.key} className="table-row-hover cursor-pointer" onClick={() => openOrder(o)}>
-                    <td className="px-4 py-3 font-mono text-xs text-ink-400 whitespace-nowrap">
-                      {o.urgent && <span className="mr-1.5" title="Urgent">⚡</span>}{o.billNo}
-                    </td>
-                    <td className="px-4 py-3 font-medium text-charcoal">
-                      {o.customer?.name || '—'}
-                      {o.customer?.place && <span className="text-press font-normal"> · {o.customer.place}</span>}
-                    </td>
-                    <td className="px-4 py-3 text-ink-400">
-                      {o.typeLabel}
-                      {o.itemCount > 1 && <span className="ml-1.5 pill bg-ink-50 text-ink-400 text-[10px]">{o.itemCount} items</span>}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono">{formatINR(o.amount)}</td>
-                    <td className="px-4 py-3"><PaymentBadge type={o.payMethod} /></td>
-                    <td className="px-4 py-3"><PaymentStatusBadge status={o.payStatus} /></td>
-                    <td className="px-4 py-3">
-                      {o.delivery === 'Mixed'
-                        ? <span className="pill bg-ink-100/60 text-ink">Mixed</span>
-                        : <StatusBadge status={o.delivery} />}
-                    </td>
-                    <td className="px-4 py-3 text-ink-400 whitespace-nowrap">{formatDate(o.date)}</td>
-                  </tr>
+              ) : groupByDate ? (
+                dateGroups.map((g) => (
+                  <Fragment key={g.day}>
+                    <tr className="bg-ink-50/80">
+                      <td colSpan={8} className="px-4 py-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-heading font-bold text-ink text-sm">📅 {g.label}</span>
+                          <span className="text-xs text-ink-400">
+                            {g.list.length} order{g.list.length > 1 ? 's' : ''} · <span className="font-mono font-semibold text-charcoal">{formatINR(g.total)}</span>
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                    {g.list.map((o) => <OrderRow key={o.key} o={o} onOpen={openOrder} />)}
+                  </Fragment>
                 ))
+              ) : (
+                filtered.map((o) => <OrderRow key={o.key} o={o} onOpen={openOrder} />)
               )}
             </tbody>
           </table>
@@ -278,6 +325,40 @@ export default function AllOrders() {
           </table>
         </div>
       </div>
+
+      {selectedJob && (
+        <JobDetailPanel
+          job={selectedJob}
+          onClose={() => setSelectedJob(null)}
+          onChanged={refreshSelected}
+          onDuplicate={(job) => { setSelectedJob(null); navigate('/new-job', { state: { duplicate: job } }) }}
+        />
+      )}
     </div>
+  )
+}
+
+function OrderRow({ o, onOpen }) {
+  return (
+    <tr className="table-row-hover cursor-pointer" onClick={() => onOpen(o)}>
+      <td className="px-4 py-3 font-mono text-xs text-ink-400 whitespace-nowrap">{o.billNo}</td>
+      <td className="px-4 py-3 font-medium text-charcoal">
+        {o.customer?.name || '—'}
+        {o.customer?.place && <span className="text-press font-normal"> · {o.customer.place}</span>}
+      </td>
+      <td className="px-4 py-3 text-ink-400">
+        {o.typeLabel}
+        {o.itemCount > 1 && <span className="ml-1.5 pill bg-ink-50 text-ink-400 text-[10px]">{o.itemCount} items</span>}
+      </td>
+      <td className="px-4 py-3 text-right font-mono">{formatINR(o.amount)}</td>
+      <td className="px-4 py-3"><PaymentBadge type={o.payMethod} /></td>
+      <td className="px-4 py-3"><PaymentStatusBadge status={o.payStatus} /></td>
+      <td className="px-4 py-3">
+        {o.delivery === 'Mixed'
+          ? <span className="pill bg-ink-100/60 text-ink">Mixed</span>
+          : <StatusBadge status={o.delivery} />}
+      </td>
+      <td className="px-4 py-3 text-ink-400 whitespace-nowrap">{formatDate(o.date)}</td>
+    </tr>
   )
 }

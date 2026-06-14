@@ -47,7 +47,7 @@ export const buildOrderMessage = (job) => {
 export const buildOrderGroupMessage = (jobs) => {
   const j0 = jobs[0] || {}
   const name = j0?.customers?.name || j0?.customer_name || ''
-  const total = jobs.reduce((s, j) => s + Number(j.total_amount || 0), 0)
+  const total = jobs.reduce((s, j) => s + Math.max(0, Number(j.total_amount || 0) - Number(j.discount || 0)), 0)
   const lines = jobs.map((j) => {
     const type = j.job_type === 'Other' ? (j.custom_job_type || 'Job') : j.job_type
     return `- ${type} x ${j.quantity}`

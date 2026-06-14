@@ -46,8 +46,8 @@ export default function Login() {
             daily cash, all in one place.
           </p>
           <div className="mt-10 space-y-1 text-[11px] text-ink-300">
-            <div>Police Station Stop, Kalaiyarkovil · 626745</div>
-            <div>+91 63818 40450 · +91 99420 24958</div>
+            <div>Near Police Station, Kalaiyarkoil, Sivaganga · 630551, Tamil Nadu</div>
+            <div>+91 70949 46595 · +91 63818 40450 · +91 84281 08001</div>
             <div>idhayamoffsetkkoil@gmail.com</div>
           </div>
         </div>

@@ -61,7 +61,8 @@ create table if not exists jobs (
   flex_unit text,
   quantity integer not null default 1,
   rate numeric(12,2) not null default 0,
-  total_amount numeric(12,2) not null default 0,
+  total_amount numeric(12,2) not null default 0,  -- gross line total (qty * rate)
+  discount numeric(12,2) not null default 0,      -- optional discount in ₹ on this line; net owed = total_amount - discount
   payment_type text not null check (payment_type in ('Cash','UPI','Credit')),
   -- delivery / fulfilment status only. Payment status is derived from the payments table.
   status text not null default 'Pending' check (status in ('Pending','In Progress','Ready for Pickup','Delivered')),
@@ -108,6 +109,9 @@ update jobs set delivered_at = updated_at where status = 'Delivered' and deliver
 -- Links jobs created together in one multi-item order (for a combined invoice)
 alter table jobs add column if not exists order_group uuid;
 create index if not exists idx_jobs_order_group on jobs (order_group);
+
+-- Optional per-line discount in ₹ (net owed = total_amount - discount)
+alter table jobs add column if not exists discount numeric(12,2) not null default 0;
 
 -- Optional delivery time + when a job became Ready for Pickup (for reminders)
 alter table jobs add column if not exists delivery_time text;
@@ -247,7 +251,7 @@ begin
         and j.deleted_at is null
     ), 0),
     total_pending = coalesce((
-      select sum(greatest(j.total_amount - coalesce((
+      select sum(greatest(j.total_amount - coalesce(j.discount, 0) - coalesce((
                 select sum(p2.amount) from payments p2 where p2.job_id = j.id
               ), 0), 0))
       from jobs j

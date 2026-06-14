@@ -43,7 +43,7 @@ export default function Credit() {
 
     const map = new Map()
     ;(jobs || []).forEach((j) => {
-      const balance = Math.max(0, Number(j.total_amount) - (paidByJob[j.id] || 0))
+      const balance = Math.max(0, Number(j.total_amount) - (Number(j.discount) || 0) - (paidByJob[j.id] || 0))
       if (balance <= 0) return
       const key = j.customers?.id || 'unknown'
       if (!map.has(key)) {

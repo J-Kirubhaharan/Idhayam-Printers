@@ -26,7 +26,7 @@ export default function DailySummary() {
         .gte('payment_date', start).lte('payment_date', end),
       supabase.from('expenses').select('amount,created_at')
         .gte('created_at', start).lte('created_at', end),
-      supabase.from('jobs').select('id,total_amount,created_at,payment_type')
+      supabase.from('jobs').select('id,total_amount,discount,created_at,payment_type')
         .eq('payment_type', 'Credit').is('deleted_at', null).gte('created_at', start).lte('created_at', end)
     ])
 
@@ -43,7 +43,7 @@ export default function DailySummary() {
       ;(advPays || []).forEach((p) => { advanceByJob[p.job_id] = (advanceByJob[p.job_id] || 0) + Number(p.amount) })
     }
     const total_credit = (creditJobs || []).reduce(
-      (s, j) => s + Math.max(0, Number(j.total_amount) - (advanceByJob[j.id] || 0)), 0)
+      (s, j) => s + Math.max(0, Number(j.total_amount) - (Number(j.discount) || 0) - (advanceByJob[j.id] || 0)), 0)
     const total_expenses = (exps || []).reduce((s, e) => s + Number(e.amount), 0)
     const total_income = total_cash + total_upi
     const net_profit = total_income - total_expenses

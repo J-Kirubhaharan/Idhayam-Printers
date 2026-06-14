@@ -73,7 +73,7 @@ export default function Reports() {
     const byCustomer = {}
     jobs.forEach((j) => {
       const name = j.customers?.name || 'Unknown'
-      byCustomer[name] = (byCustomer[name] || 0) + Number(j.total_amount)
+      byCustomer[name] = (byCustomer[name] || 0) + Math.max(0, Number(j.total_amount) - (Number(j.discount) || 0))
     })
     const topCustomers = Object.entries(byCustomer)
       .map(([name, value]) => ({ name, value }))
@@ -105,7 +105,7 @@ export default function Reports() {
       .sort((a, b) => b.value - a.value)
 
     const totals = {
-      revenue: jobs.reduce((s, j) => s + Number(j.total_amount), 0),
+      revenue: jobs.reduce((s, j) => s + Math.max(0, Number(j.total_amount) - (Number(j.discount) || 0)), 0),
       collected: pays.reduce((s, p) => s + Number(p.amount), 0),
       expenses: exps.reduce((s, e) => s + Number(e.amount), 0),
       outstanding: creditOutstanding.reduce((s, c) => s + c.value, 0),

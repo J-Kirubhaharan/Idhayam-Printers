@@ -35,6 +35,8 @@ const emptyForm = {
   deliveryDate: '',
   deliveryTime: '',
   notes: '',
+  discountType: 'rupees',  // 'rupees' | 'percent'
+  discountValue: '',
   paymentType: 'Cash',
   paidNow: '',
   paidVia: 'Cash',
@@ -140,10 +142,18 @@ export default function NewJob() {
   useEffect(() => { setResolution(null) }, [form.customerName, form.whatsapp])
 
   const total = useMemo(() => form.items.reduce((s, it) => s + lineTotal(it), 0), [form.items])
+  // optional order discount (₹ or % of subtotal), capped at the subtotal
+  const discountAmt = useMemo(() => {
+    const v = Number(form.discountValue) || 0
+    if (v <= 0 || total <= 0) return 0
+    const amt = form.discountType === 'percent' ? (total * v) / 100 : v
+    return Math.min(Math.round(amt), total)
+  }, [form.discountType, form.discountValue, total])
+  const netTotal = Math.max(0, total - discountAmt)
   // Cash/UPI = fully paid. Credit = pay an advance now, the rest becomes pending.
   const isCredit = form.paymentType === 'Credit'
-  const paidNowNum = isCredit ? Math.min(Number(form.paidNow) || 0, total) : total
-  const pendingNum = isCredit ? Math.max(0, total - paidNowNum) : 0
+  const paidNowNum = isCredit ? Math.min(Number(form.paidNow) || 0, netTotal) : netTotal
+  const pendingNum = isCredit ? Math.max(0, netTotal - paidNowNum) : 0
 
   const suggestions = useMemo(() => {
     const q = form.customerName.trim().toLowerCase()
@@ -229,7 +239,7 @@ export default function NewJob() {
 
   const handleConfirm = async () => {
     if (!validateStep(1) || !validateStep(2)) return
-    if (isCredit && (Number(form.paidNow) || 0) > total) {
+    if (isCredit && (Number(form.paidNow) || 0) > netTotal) {
       return toast.error('Amount paid now cannot exceed the total')
     }
     setBusy(true)
@@ -281,6 +291,17 @@ export default function NewJob() {
       const baseStr = `IPO-${yr}-${String(maxBase + 1).padStart(3, '0')}`
       const multi = form.items.length > 1
 
+      // distribute the order discount across items (proportional to each line total;
+      // any rounding remainder goes onto the last item so the shares sum exactly)
+      const shares = form.items.map(() => 0)
+      if (discountAmt > 0 && total > 0) {
+        let allocated = 0
+        form.items.forEach((it, idx) => {
+          if (idx === form.items.length - 1) shares[idx] = discountAmt - allocated
+          else { shares[idx] = Math.round((discountAmt * lineTotal(it)) / total); allocated += shares[idx] }
+        })
+      }
+
       // 3. create one job per item, all sharing an order group
       const orderGroup = crypto.randomUUID()
       const created = []
@@ -305,6 +326,7 @@ export default function NewJob() {
           quantity: Number(it.quantity),
           rate: Number(it.rate),
           total_amount: lineTotal(it),
+          discount: shares[itemNo - 1] || 0,
           is_urgent: form.isUrgent,
           assigned_to: form.assignedTo.trim() || null,
           needs_design: it.needsDesign,
@@ -315,7 +337,7 @@ export default function NewJob() {
           delivery_date: form.deliveryDate || null,
           delivery_time: form.deliveryTime || null,
           notes: form.notes.trim() || null
-        }).select('id, total_amount').single()
+        }).select('id, total_amount, discount').single()
         if (jErr) throw jErr
         created.push(job)
 
@@ -334,7 +356,8 @@ export default function NewJob() {
       const payVia = isCredit ? form.paidVia : form.paymentType
       for (const job of created) {
         if (remaining <= 0) break
-        const applied = Math.min(remaining, Number(job.total_amount))
+        const netJob = Math.max(0, Number(job.total_amount) - Number(job.discount || 0))
+        const applied = Math.min(remaining, netJob)
         if (applied > 0) {
           await supabase.from('payments').insert({
             job_id: job.id, amount: applied, payment_type: payVia,
@@ -548,9 +571,40 @@ export default function NewJob() {
               <button type="button" onClick={addItem} className="btn-outline w-full">+ Add another job type</button>
 
               <div className="card bg-leaf/5 flex items-center justify-between">
-                <span className="label mb-0">Grand Total</span>
+                <span className="label mb-0">{discountAmt > 0 ? 'Subtotal' : 'Grand Total'}</span>
                 <span className="font-mono font-bold text-leaf text-xl">{formatINR(total)}</span>
               </div>
+
+              {/* Discount (optional) */}
+              <div className="rounded-xl border border-ink-100 p-4 space-y-3">
+                <label className="label mb-0">Discount (optional)</label>
+                <div className="flex gap-2">
+                  <div className="flex rounded-xl border border-ink-100 overflow-hidden shrink-0">
+                    {['rupees', 'percent'].map((dt) => (
+                      <button key={dt} type="button" onClick={() => set('discountType', dt)}
+                        className={`px-4 py-2.5 text-sm font-bold transition-colors ${form.discountType === dt ? 'bg-ink text-white' : 'bg-white text-ink-300 hover:bg-ink-50'}`}>
+                        {dt === 'rupees' ? '₹' : '%'}
+                      </button>
+                    ))}
+                  </div>
+                  <input type="number" min="0" className="input font-mono flex-1"
+                    placeholder={form.discountType === 'percent' ? 'e.g. 10' : 'e.g. 100'}
+                    value={form.discountValue} onChange={(e) => set('discountValue', e.target.value)} />
+                </div>
+                {discountAmt > 0 && (
+                  <div className="flex items-center justify-between text-sm pt-1">
+                    <span className="text-ink-300">Discount{form.discountType === 'percent' ? ` (${Number(form.discountValue)}%)` : ''}</span>
+                    <span className="font-mono font-semibold text-press">− {formatINR(discountAmt)}</span>
+                  </div>
+                )}
+              </div>
+
+              {discountAmt > 0 && (
+                <div className="card bg-ink text-white flex items-center justify-between">
+                  <span className="label mb-0 text-ink-100">Net Payable</span>
+                  <span className="font-mono font-bold text-xl">{formatINR(netTotal)}</span>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -606,7 +660,7 @@ export default function NewJob() {
                   ))}
                 </div>
                 {!isCredit && (
-                  <p className="text-xs text-leaf mt-2 font-medium">✓ Fully paid — {formatINR(total)} received via {form.paymentType}.</p>
+                  <p className="text-xs text-leaf mt-2 font-medium">✓ Fully paid — {formatINR(netTotal)} received via {form.paymentType}.</p>
                 )}
               </div>
 
@@ -614,11 +668,11 @@ export default function NewJob() {
                 <div className="rounded-xl border border-ink-100 bg-paper p-4 space-y-4">
                   <div>
                     <label className="label">Amount paying now (advance)</label>
-                    <input type="number" className="input font-mono" placeholder="0" max={total}
+                    <input type="number" className="input font-mono" placeholder="0" max={netTotal}
                       value={form.paidNow} onChange={(e) => set('paidNow', e.target.value)} />
                     <div className="flex gap-3 mt-1.5">
                       <button type="button" onClick={() => set('paidNow', '0')} className="text-[11px] font-semibold text-ink-300 hover:text-ink">Nothing now</button>
-                      <button type="button" onClick={() => set('paidNow', String(total))} className="text-[11px] font-semibold text-ink-300 hover:text-ink">Paying full</button>
+                      <button type="button" onClick={() => set('paidNow', String(netTotal))} className="text-[11px] font-semibold text-ink-300 hover:text-ink">Paying full</button>
                     </div>
                   </div>
                   {paidNowNum > 0 && (
@@ -633,7 +687,9 @@ export default function NewJob() {
                     </div>
                   )}
                   <div className="space-y-1.5 pt-1">
-                    <div className="flex items-center justify-between text-sm"><span className="text-ink-300">Total</span><span className="font-mono">{formatINR(total)}</span></div>
+                    <div className="flex items-center justify-between text-sm"><span className="text-ink-300">{discountAmt > 0 ? 'Subtotal' : 'Total'}</span><span className="font-mono">{formatINR(total)}</span></div>
+                    {discountAmt > 0 && <div className="flex items-center justify-between text-sm"><span className="text-ink-300">Discount</span><span className="font-mono text-press">− {formatINR(discountAmt)}</span></div>}
+                    {discountAmt > 0 && <div className="flex items-center justify-between text-sm"><span className="text-ink-300">Net payable</span><span className="font-mono font-semibold">{formatINR(netTotal)}</span></div>}
                     <div className="flex items-center justify-between text-sm"><span className="text-ink-300">Paid now</span><span className="font-mono font-semibold text-leaf">{formatINR(paidNowNum)}</span></div>
                     <div className="flex items-center justify-between pt-2 border-t border-ink-100"><span className="font-semibold text-press">Pending Credit</span><span className="font-mono font-bold text-press">{formatINR(pendingNum)}</span></div>
                   </div>
@@ -660,9 +716,15 @@ export default function NewJob() {
 
                 <SummaryRow label="Payment" value={isCredit ? `Credit · paid ${formatINR(paidNowNum)} now (${form.paidVia})` : `${form.paymentType} · fully paid`} />
                 {form.isUrgent && <SummaryRow label="Priority" value="⚡ Urgent" />}
+                {discountAmt > 0 && (
+                  <>
+                    <SummaryRow label="Subtotal" value={formatINR(total)} />
+                    <SummaryRow label={`Discount${form.discountType === 'percent' ? ` (${Number(form.discountValue)}%)` : ''}`} value={`− ${formatINR(discountAmt)}`} />
+                  </>
+                )}
                 <div className="pt-2 mt-1 border-t border-ink-100 flex items-center justify-between">
-                  <span className="font-semibold text-ink">Grand Total</span>
-                  <span className="font-mono font-bold text-leaf text-xl">{formatINR(total)}</span>
+                  <span className="font-semibold text-ink">{discountAmt > 0 ? 'Net Payable' : 'Grand Total'}</span>
+                  <span className="font-mono font-bold text-leaf text-xl">{formatINR(netTotal)}</span>
                 </div>
                 {isCredit && pendingNum > 0 && (
                   <div className="flex items-center justify-between">

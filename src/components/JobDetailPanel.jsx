@@ -248,7 +248,9 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
   }
 
   const totalPaid = payments.reduce((s, p) => s + Number(p.amount), 0)
-  const balance = Math.max(0, Number(job.total_amount) - totalPaid)
+  const jobDiscount = Number(job.discount) || 0
+  const jobNet = Math.max(0, Number(job.total_amount) - jobDiscount)
+  const balance = Math.max(0, jobNet - totalPaid)
 
   return (
     <AnimatePresence>
@@ -312,7 +314,15 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
                   )}
                   <Row label={t('field.quantity')}><span className="font-mono">{job.quantity}</span></Row>
                   <Row label={t('jd.rate')}><span className="font-mono">{formatINR(job.rate)}</span></Row>
-                  <Row label={t('jd.total')}><span className="font-mono font-semibold text-ink">{formatINR(job.total_amount)}</span></Row>
+                  {jobDiscount > 0 ? (
+                    <>
+                      <Row label={t('jd.total')}><span className="font-mono">{formatINR(job.total_amount)}</span></Row>
+                      <Row label="Discount"><span className="font-mono text-press">− {formatINR(jobDiscount)}</span></Row>
+                      <Row label="Net"><span className="font-mono font-semibold text-ink">{formatINR(jobNet)}</span></Row>
+                    </>
+                  ) : (
+                    <Row label={t('jd.total')}><span className="font-mono font-semibold text-ink">{formatINR(job.total_amount)}</span></Row>
+                  )}
                   {(job.payment_type === 'Credit' || totalPaid > 0) && (
                     <>
                       <Row label={t('jd.paid')}><span className="font-mono text-leaf">{formatINR(totalPaid)}</span></Row>
@@ -525,6 +535,7 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
               <div className="space-y-5">
                 <div className="card space-y-2">
                   <Row label={t('jd.total')}><span className="font-mono">{formatINR(job.total_amount)}</span></Row>
+                  {jobDiscount > 0 && <Row label="Discount"><span className="font-mono text-press">− {formatINR(jobDiscount)}</span></Row>}
                   <Row label={t('jd.paid')}><span className="font-mono text-leaf">{formatINR(totalPaid)}</span></Row>
                   <Row label={t('jd.balance')}><span className="font-mono font-semibold text-press">{formatINR(balance)}</span></Row>
                 </div>

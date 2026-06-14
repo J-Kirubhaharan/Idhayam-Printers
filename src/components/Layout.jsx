@@ -2,10 +2,11 @@ import { Outlet } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import Sidebar from './Sidebar'
-import Clock from './Clock'
+import AlarmCenter from './AlarmCenter'
 import Notifications from './Notifications'
 import LangToggle from './LangToggle'
 import Calculator from './Calculator'
+import GlobalSearch from './GlobalSearch'
 import { supabase } from '../lib/supabase'
 import { useLang } from '../context/LanguageContext'
 
@@ -17,10 +18,11 @@ export default function Layout() {
         {/* Live clock + active-work counter, centered; notifications bell top-right */}
         <div className="relative pt-16 lg:pt-6 px-4">
           <div className="flex flex-col items-center">
-            <Clock />
+            <AlarmCenter />
             <ActiveCounter />
           </div>
           <div className="absolute right-4 top-16 lg:top-6 flex items-center gap-2">
+            <GlobalSearch />
             <Calculator />
             <LangToggle />
             <Notifications />

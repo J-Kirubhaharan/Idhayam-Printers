@@ -50,6 +50,16 @@ export const formatDateTime = (input) => {
 export const todayIST = () =>
   new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 
+// a timestamp (ISO) -> "9:05 PM" in IST (the clock time it was created at)
+export const formatTimeIST = (input) => {
+  if (!input) return ''
+  const d = new Date(input)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleTimeString('en-US', {
+    timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true
+  })
+}
+
 // "HH:MM" (24h) -> "h:MM AM/PM"
 export const formatTime12 = (t) => {
   if (!t) return ''
@@ -73,7 +83,7 @@ export const deliveryDeadline = (dateStr, timeStr) => {
 // versus the total — independent of the payment type label. This way an edit
 // that raises the total (or any underpayment) correctly shows a balance.
 export const paymentStatusOf = (job, paid = 0) => {
-  const total = Number(job?.total_amount) || 0
+  const total = Math.max(0, (Number(job?.total_amount) || 0) - (Number(job?.discount) || 0))
   if (total <= 0) return 'Paid'
   if (paid >= total - 0.01) return 'Paid'
   if (paid > 0) return 'Partial'

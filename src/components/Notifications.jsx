@@ -6,6 +6,16 @@ import { supabase } from '../lib/supabase'
 import { todayIST, formatDate, formatTime12, deliveryDeadline } from '../lib/format'
 import JobDetailPanel from './JobDetailPanel'
 
+// toast that carries a small ✕ so it can be dismissed instantly (it pops up over
+// the top-right buttons, so the owner shouldn't have to wait for it to fade)
+const popClose = (text, opts) => toast((t) => (
+  <span className="flex items-center gap-2.5">
+    <span className="leading-snug">{text}</span>
+    <button onClick={() => toast.dismiss(t.id)}
+      className="shrink-0 -mr-1 w-5 h-5 rounded-full bg-white/15 hover:bg-white/30 flex items-center justify-center text-white text-xs leading-none transition-colors">✕</button>
+  </span>
+), opts)
+
 const SEEN_KEY = 'idhayam_notif_seen'
 const READ_KEY = 'idhayam_notif_read'
 const DISMISS_KEY = 'idhayam_notif_dismissed'  // reminder keys the owner cleared
@@ -122,12 +132,12 @@ export default function Notifications() {
     visible.forEach((n) => {
       if (!seen.includes(n.key) && n.kind !== 'activity') {
         if (n.big) {
-          toast(`⏰ ${n.title} — ${n.detail}`, {
+          popClose(`⏰ ${n.title} — ${n.detail}`, {
             duration: 12000,
             style: { background: '#E63946', color: '#fff', fontWeight: 600, fontSize: '15px' }
           })
         } else {
-          toast(`${n.icon} ${n.title}: ${n.detail}`, { duration: 7000 })
+          popClose(`${n.icon} ${n.title}: ${n.detail}`, { duration: 7000 })
         }
       }
     })
@@ -150,7 +160,7 @@ export default function Notifications() {
         const a = payload.new
         if (a.target !== 'owner') return
         const icon = a.event.includes('finished') ? '✅' : a.event.includes('Design') ? '🎨' : '🖨'
-        toast(`${icon} ${a.job_code} · ${a.customer_name} — ${a.event}`, { duration: 7000 })
+        popClose(`${icon} ${a.job_code} · ${a.customer_name} — ${a.event}`, { duration: 7000 })
         compute()
       })
       .subscribe()
