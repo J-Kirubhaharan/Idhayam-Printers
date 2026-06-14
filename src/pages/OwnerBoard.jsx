@@ -13,10 +13,22 @@ const dayKey = (iso) => {
   try { return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) }
   catch { return '' }
 }
+// group a list of jobs by their date taken, most recent day first
+const groupByDate = (list) => {
+  const m = new Map()
+  for (const j of list) {
+    const k = dayKey(j.created_at)
+    if (!m.has(k)) m.set(k, [])
+    m.get(k).push(j)
+  }
+  return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([day, items]) => ({ day, list: items }))
+}
 
 export default function OwnerBoard() {
+  const { t } = useLang()
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
+  const [urgentDates, setUrgentDates] = useState(false)  // group the Urgent section by date?
 
   const fetchBoard = async () => {
     const { data } = await supabase
@@ -40,17 +52,9 @@ export default function OwnerBoard() {
 
   const today = todayIST()
   const urgent = useMemo(() => jobs.filter((j) => j.is_urgent), [jobs])
-  // non-urgent jobs grouped by the date they were taken (most recent day first)
-  const byDate = useMemo(() => {
-    const m = new Map()
-    for (const j of jobs) {
-      if (j.is_urgent) continue
-      const k = dayKey(j.created_at)
-      if (!m.has(k)) m.set(k, [])
-      m.get(k).push(j)
-    }
-    return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([day, list]) => ({ day, list }))
-  }, [jobs])
+  // urgent + non-urgent both grouped by the date taken (most recent day first)
+  const urgentByDate = useMemo(() => groupByDate(jobs.filter((j) => j.is_urgent)), [jobs])
+  const byDate = useMemo(() => groupByDate(jobs.filter((j) => !j.is_urgent)), [jobs])
 
   // list of names already used, for quick re-assigning
   const names = useMemo(
@@ -92,17 +96,33 @@ export default function OwnerBoard() {
         <div className="space-y-8">
           {urgent.length > 0 && (
             <section>
-              <SectionHeader title="⚡ Urgent" count={urgent.length} accent />
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                <AnimatePresence>
-                  {urgent.map((j) => <OwnerJobCard key={j.id} job={j} today={today} onUpdate={updateJob} />)}
-                </AnimatePresence>
-              </div>
+              <SectionHeader title={`⚡ ${t('board.urgent')}`} count={urgent.length} accent
+                right={<DateToggle on={urgentDates} onClick={() => setUrgentDates((v) => !v)} label={t('board.byDate')} />} />
+              {urgentDates ? (
+                <div className="space-y-5">
+                  {urgentByDate.map((g) => (
+                    <div key={g.day}>
+                      <DateSubHeader label={g.day === today ? t('board.today') : formatDate(g.list[0].created_at)} count={g.list.length} />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                        <AnimatePresence>
+                          {g.list.map((j) => <OwnerJobCard key={j.id} job={j} today={today} onUpdate={updateJob} />)}
+                        </AnimatePresence>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                  <AnimatePresence>
+                    {urgent.map((j) => <OwnerJobCard key={j.id} job={j} today={today} onUpdate={updateJob} />)}
+                  </AnimatePresence>
+                </div>
+              )}
             </section>
           )}
           {byDate.map((g) => (
             <section key={g.day}>
-              <SectionHeader title={g.day === today ? 'Today' : formatDate(g.list[0].created_at)} count={g.list.length} />
+              <SectionHeader title={g.day === today ? t('board.today') : formatDate(g.list[0].created_at)} count={g.list.length} />
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                 <AnimatePresence>
                   {g.list.map((j) => <OwnerJobCard key={j.id} job={j} today={today} onUpdate={updateJob} />)}
@@ -116,12 +136,31 @@ export default function OwnerBoard() {
   )
 }
 
-function SectionHeader({ title, count, accent }) {
+function DateSubHeader({ label, count }) {
+  return (
+    <div className="flex items-center gap-2 mb-2">
+      <span className="text-sm font-semibold text-ink-400">{label}</span>
+      <span className="text-xs text-ink-300">· {count}</span>
+    </div>
+  )
+}
+
+function DateToggle({ on, onClick, label }) {
+  return (
+    <button onClick={onClick}
+      className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${on ? 'bg-ink text-white border-ink' : 'bg-white text-ink border-ink-100 hover:bg-ink-50'}`}>
+      📅 {label}{on ? ' ✓' : ''}
+    </button>
+  )
+}
+
+function SectionHeader({ title, count, accent, right }) {
   return (
     <div className="flex items-center gap-3 mb-3">
       <h2 className={`font-heading font-bold text-lg ${accent ? 'text-press' : 'text-ink'}`}>{title}</h2>
       <span className={`pill ${accent ? 'bg-press text-white' : 'bg-ink-100/70 text-ink'}`}>{count}</span>
       <div className="flex-1 h-px bg-ink-100/70" />
+      {right}
     </div>
   )
 }

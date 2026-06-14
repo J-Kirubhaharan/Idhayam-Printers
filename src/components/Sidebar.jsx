@@ -18,6 +18,7 @@ const links = [
   { to: '/add-old-record', key: 'nav.addOldRecord', icon: 'history' },
   { to: '/daily-summary', key: 'nav.dailySummary', icon: 'calendar' },
   { to: '/all-orders', key: 'nav.allOrders', icon: 'orders' },
+  { to: '/invoices', key: 'nav.invoices', icon: 'invoice' },
   { to: '/reports', key: 'nav.reports', icon: 'reports' }
 ]
 
@@ -121,6 +122,7 @@ function Icon({ name }) {
     history: <><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l3 2" /></>,
     calendar: <><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /><path d="m9 16 2 2 4-4" /></>,
     orders: <><rect x="8" y="2" width="8" height="4" rx="1" /><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><path d="M9 12h6M9 16h6" /></>,
+    invoice: <><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2V3z" /><path d="M9 8h6M9 12h6M9 16h3" /></>,
     reports: <><path d="M3 3v18h18" /><path d="m7 14 4-4 3 3 5-6" /></>
   }
   return (

@@ -15,6 +15,7 @@ export const strings = {
   'nav.dailySummary': { en: 'Daily Summary', ta: 'தினசரி சுருக்கம்' },
   'nav.addOldRecord': { en: 'Add Old Record', ta: 'பழைய பதிவு சேர்' },
   'nav.allOrders': { en: 'All Orders', ta: 'அனைத்து ஆர்டர்கள்' },
+  'nav.invoices': { en: 'Invoices', ta: 'விலைப்பட்டியல்கள்' },
   'nav.reports': { en: 'Reports', ta: 'அறிக்கைகள்' },
 
   'common.signOut': { en: 'Sign out', ta: 'வெளியேறு' },
@@ -64,6 +65,7 @@ export const strings = {
   'board.none': { en: 'None', ta: 'யாருமில்லை' },
   'board.design': { en: 'Design', ta: 'டிசைன்' },
   'board.print': { en: 'Print', ta: 'அச்சு' },
+  'board.byDate': { en: 'By date', ta: 'தேதி வாரியாக' },
 
   // Worker assignment (design / print) + Start prompt
   'assign.design': { en: 'Design — assigned to', ta: 'டிசைன் — ஒதுக்கப்பட்டவர்' },

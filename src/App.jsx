@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard'
 import NewJob from './pages/NewJob'
 import ExistingJobs from './pages/ExistingJobs'
 import AllOrders from './pages/AllOrders'
+import Invoices from './pages/Invoices'
 import AddOldRecord from './pages/AddOldRecord'
 import CompletedJobs from './pages/CompletedJobs'
 import DeletedJobs from './pages/DeletedJobs'
@@ -75,6 +76,7 @@ export default function App() {
               <Route path="/expenses" element={<Expenses />} />
               <Route path="/daily-summary" element={<DailySummary />} />
               <Route path="/all-orders" element={<AllOrders />} />
+              <Route path="/invoices" element={<Invoices />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
