@@ -4,6 +4,12 @@ import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
 
+const LOGIN_EMAILS = [
+  'idhayamoffsetkkoil@gmail.com',
+  'design@idhayam.shop',
+  'print@idhayam.shop'
+]
+
 export default function Login() {
   const { signIn, session } = useAuth()
   const navigate = useNavigate()
@@ -11,6 +17,7 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [showEmailSuggestions, setShowEmailSuggestions] = useState(false)
 
   useEffect(() => {
     if (session) navigate('/', { replace: true })
@@ -35,21 +42,23 @@ export default function Login() {
       {/* Brand panel */}
       <div className="hidden lg:flex w-1/2 bg-ink relative overflow-hidden ink-drop">
         <div className="relative z-10 flex flex-col justify-center px-16 text-white">
-          <div className="w-16 h-16 rounded-2xl bg-press flex items-center justify-center shadow-md mb-6">
-            <span className="font-heading font-extrabold text-white text-2xl leading-none">IP</span>
-          </div>
+          <div className="w-24 h-24 rounded-2xl bg-white flex items-center justify-center shadow-md mb-6 overflow-hidden p-1">
+  <img
+    src="/logo.png"
+    alt="Idhayam Printers Logo"
+    className="w-full h-full object-contain"
+  />
+</div>
           <h1 className="font-heading font-extrabold text-4xl leading-tight mb-3">
-            Idhayam<br />Printers
+            IDHAYAM  
+            PRINTERS
           </h1>
-          <p className="text-ink-100 text-sm max-w-sm leading-relaxed">
-            Job &amp; billing management — track jobs, customers, credit, expenses and
-            daily cash, all in one place.
-          </p>
-          <div className="mt-10 space-y-1 text-[11px] text-ink-300">
+          
+          <h2 className="mt-15 space-y-1 text-[14px] text-ink-300">
             <div>Near Police Station, Kalaiyarkoil, Sivaganga · 630551, Tamil Nadu</div>
             <div>+91 70949 46595 · +91 63818 40450 · +91 84281 08001</div>
             <div>idhayamoffsetkkoil@gmail.com</div>
-          </div>
+          </h2>
         </div>
         <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-press/20 blur-2xl" />
         <div className="absolute top-10 -left-16 w-72 h-72 rounded-full bg-ink-400/30 blur-2xl" />
@@ -78,16 +87,39 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="label">Email</label>
-              <input
-                type="email"
-                autoComplete="username"
-                className="input"
-                placeholder="shop@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
+  <label className="label">Email</label>
+
+  <div className="relative">
+    <input
+      type="email"
+      autoComplete="off"
+      className="input"
+      placeholder="Select login email"
+      value={email}
+      onFocus={() => setShowEmailSuggestions(true)}
+      onBlur={() => setTimeout(() => setShowEmailSuggestions(false), 150)}
+      onChange={(e) => setEmail(e.target.value)}
+    />
+
+    {showEmailSuggestions && (
+      <div className="absolute left-0 right-0 top-full mt-2 bg-white border border-ink-100 rounded-xl shadow-card overflow-hidden z-30">
+        {LOGIN_EMAILS.map((mail) => (
+          <button
+            key={mail}
+            type="button"
+            onMouseDown={() => {
+              setEmail(mail)
+              setShowEmailSuggestions(false)
+            }}
+            className="w-full text-left px-4 py-3 text-sm text-charcoal hover:bg-ink-50 transition-colors"
+          >
+            {mail}
+          </button>
+        ))}
+      </div>
+    )}
+  </div>
+</div>
             <div>
               <label className="label">Password</label>
               <div className="relative">

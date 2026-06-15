@@ -7,10 +7,10 @@ import toast from 'react-hot-toast'
 const links = [
   { to: '/', key: 'nav.dashboard', icon: 'dashboard' },
   { to: '/new-job', key: 'nav.newJob', icon: 'plus' },
-  { to: '/quotation', key: 'nav.quotation', icon: 'quote' },
+  { to: '/job-board', key: 'nav.jobBoard', icon: 'board' },
   { to: '/jobs', key: 'nav.existingJobs', icon: 'list' },
   { to: '/completed-jobs', key: 'nav.completedJobs', icon: 'check' },
-  { to: '/job-board', key: 'nav.jobBoard', icon: 'board' },
+  { to: '/quotation', key: 'nav.quotation', icon: 'quote' },
   { to: '/deleted-jobs', key: 'nav.deletedJobs', icon: 'trash' },
   { to: '/customers', key: 'nav.customers', icon: 'users' },
   { to: '/credit', key: 'nav.credit', icon: 'rupee' },
@@ -56,8 +56,8 @@ export default function Sidebar() {
           <div className="flex items-center gap-3">
             <Logo />
             <div>
-              <div className="font-heading font-bold text-lg leading-tight">Idhayam</div>
-              <div className="text-[11px] text-ink-200 leading-tight">Printers</div>
+              <div className="font-heading font-bold text-lg leading-tight">IDHAYAM</div>
+              <div className="text-[13px] text-ink-200 leading-tight">PRINTERS</div>
             </div>
           </div>
         </div>
