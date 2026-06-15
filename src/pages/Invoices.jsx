@@ -19,6 +19,17 @@ const sortKeyOf = (billNo) => {
   return (parseInt(p[1], 10) || 0) * 100000 + (parseInt(p[2], 10) || 0)
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+// load /logo.png into the browser cache once, so every off-screen invoice can
+// paint it instantly (otherwise the bulk PDF captures before the logo loads)
+const preloadLogo = () => new Promise((res) => {
+  const im = new Image()
+  im.onload = res; im.onerror = res
+  im.src = '/logo.png'
+  setTimeout(res, 3000)
+})
+
 // wait for any <img> inside a node to finish loading (so the logo is in the canvas)
 const waitForImages = (node) => {
   const imgs = [...node.querySelectorAll('img')]
@@ -39,6 +50,7 @@ const renderInvoiceCanvas = async (order) => {
     requestAnimationFrame(() => requestAnimationFrame(res))
   })
   await waitForImages(holder)
+  await sleep(80)  // let the image actually paint before capture
   const canvas = await html2canvas(sheetEl || holder.firstChild, { scale: 2, backgroundColor: '#ffffff', useCORS: true })
   root.unmount()
   holder.remove()
@@ -133,6 +145,7 @@ export default function Invoices() {
     setBusy(true)
     setProgress({ done: 0, total: list.length })
     try {
+      await preloadLogo()  // make sure the logo is cached before rendering invoices
       const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true })
       const pageW = pdf.internal.pageSize.getWidth()
       const pageH = pdf.internal.pageSize.getHeight()

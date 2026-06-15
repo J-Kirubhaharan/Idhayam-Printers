@@ -19,15 +19,14 @@ export const formatINR = (n, withPaise = false) => {
 export const formatNumberIN = (n) =>
   new Intl.NumberFormat('en-IN').format(Number(n) || 0)
 
-// DD/MM/YYYY
+// DD/MM/YYYY — always in India time (IST) so it matches the date-grouping keys
+// (which also use Asia/Kolkata); otherwise a job near midnight could show one
+// date but group under another.
 export const formatDate = (input) => {
   if (!input) return '-'
   const d = new Date(input)
   if (isNaN(d.getTime())) return '-'
-  const dd = String(d.getDate()).padStart(2, '0')
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const yy = d.getFullYear()
-  return `${dd}/${mm}/${yy}`
+  return d.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' })
 }
 
 // DD/MM/YYYY HH:mm IST

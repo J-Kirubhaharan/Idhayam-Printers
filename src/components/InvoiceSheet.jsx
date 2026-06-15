@@ -140,12 +140,7 @@ export default function InvoiceSheet({ jobs, paid = 0, innerRef }) {
         </div>
       </div>
 
-      {jobs[0]?.notes && (
-        <div className="px-9 mt-6">
-          <div className="text-[11px] font-bold tracking-wide text-gray-400 uppercase">Notes</div>
-          <div className="text-sm text-charcoal/80 whitespace-pre-wrap mt-1">{jobs[0].notes}</div>
-        </div>
-      )}
+      {/* Notes are internal (for the job-board team) and intentionally NOT shown on the invoice */}
 
       <div className="flex-1" />
 
