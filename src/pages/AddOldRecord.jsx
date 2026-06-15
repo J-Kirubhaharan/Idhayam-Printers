@@ -107,15 +107,15 @@ export default function AddOldRecord() {
         customerId = created.id
       }
 
-      // 2. allocate a bill number for the ORDER-DATE's year (IPO-2024-..., etc.)
+      // 2. allocate a bill number for the ORDER-DATE's year (IP-2024-..., etc.)
       const yr = orderDate.slice(0, 4)
-      const { data: idRows } = await supabase.from('jobs').select('job_id').like('job_id', `IPO-${yr}-%`)
+      const { data: idRows } = await supabase.from('jobs').select('job_id').like('job_id', `IP-${yr}-%`)
       let maxBase = 0
       for (const r of idRows || []) {
         const n = parseInt((r.job_id || '').split('-')[2], 10)
         if (!isNaN(n) && n > maxBase) maxBase = n
       }
-      const baseStr = `IPO-${yr}-${String(maxBase + 1).padStart(3, '0')}`
+      const baseStr = `IP-${yr}-${String(maxBase + 1).padStart(3, '0')}`
       const multi = valid.length > 1
       const createdAtISO = new Date(`${orderDate}T12:00:00+05:30`).toISOString()
 

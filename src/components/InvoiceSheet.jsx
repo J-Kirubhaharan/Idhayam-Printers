@@ -9,7 +9,7 @@ export const SHOP = {
   email: 'idhayamoffsetkkoil@gmail.com'
 }
 
-// the bill number is the shared base, e.g. IPO-2026-011 (strip any -1/-2 item suffix)
+// the bill number is the shared base, e.g. IP-2026-011 (strip any -1/-2 item suffix)
 export const billNoOf = (jobId) => {
   const p = (jobId || '').split('-')
   return p.length > 3 ? p.slice(0, 3).join('-') : (jobId || '')
@@ -37,10 +37,10 @@ export default function InvoiceSheet({ jobs, paid = 0, innerRef }) {
       {/* Top: logo + shop name (left), INVOICE wordmark (right) */}
       <div className="px-9 pt-9 pb-7 flex items-center justify-between gap-6">
         <div className="flex items-center gap-4">
-          <ShopLogo size={88} />
+          <ShopLogo size={120} />
           <div>
-            <div className="font-heading font-extrabold text-3xl text-ink leading-none">Idhayam</div>
-            <div className="text-base tracking-[0.28em] text-press font-bold mt-1">PRINTERS</div>
+            <div className="font-heading font-extrabold text-5xl text-ink leading-none">IDHAYAM</div>
+            <div className="text-2xl tracking-[0.28em] text-press font-bold mt-1">PRINTERS</div>
           </div>
         </div>
         <h1 className="font-heading font-extrabold text-5xl tracking-[0.18em] text-charcoal leading-none">INVOICE</h1>
@@ -70,9 +70,7 @@ export default function InvoiceSheet({ jobs, paid = 0, innerRef }) {
           } />
           <div className="border-t border-gray-200 my-3" />
           <MetaRow label="Payment Method" value={jobs[0]?.payment_type} />
-          {jobs[0]?.delivery_date && (
-            <MetaRow label="Delivery Date" value={`${formatDate(jobs[0].delivery_date)}${jobs[0].delivery_time ? ' · ' + formatTime12(jobs[0].delivery_time) : ''}`} />
-          )}
+          
           <MetaRow label="Payment Status" value={payStatus} />
         </div>
       </div>
@@ -115,7 +113,7 @@ export default function InvoiceSheet({ jobs, paid = 0, innerRef }) {
           <div className="font-heading font-extrabold text-4xl text-charcoal mt-1">{formatINR(balance)}</div>
           <div className="border-t-2 border-charcoal w-44 mt-2" />
           <div className="text-xs text-gray-400 mt-2">
-            {balance > 0 ? 'Balance payable on delivery' : 'Fully paid — thank you!'}
+            {balance > 0 ? 'Balance payable on delivery' : 'Fully paid - Thank you!'}
           </div>
         </div>
         <div className="text-sm">

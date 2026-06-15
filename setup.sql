@@ -211,7 +211,7 @@ create table if not exists daily_summary (
 create index if not exists idx_daily_summary_date on daily_summary (date desc);
 
 -- ============================================================
--- 7. AUTO-GENERATE JOB ID (IPO-YYYY-001)
+-- 7. AUTO-GENERATE JOB ID (IP-YYYY-001)
 -- ============================================================
 create or replace function generate_job_id()
 returns trigger as $$
@@ -225,8 +225,8 @@ begin
     select coalesce(max(cast(split_part(job_id, '-', 3) as int)), 0) + 1
       into next_seq
       from jobs
-      where job_id like 'IPO-' || yr || '-%';
-    new_id := 'IPO-' || yr || '-' || lpad(next_seq::text, 3, '0');
+      where job_id like 'IP-' || yr || '-%';
+    new_id := 'IP-' || yr || '-' || lpad(next_seq::text, 3, '0');
     new.job_id := new_id;
   end if;
   return new;
@@ -540,7 +540,7 @@ end$$;
 create table if not exists activity_log (
   id uuid primary key default uuid_generate_v4(),
   job_id uuid,
-  job_code text,        -- the display Job ID (IPO-...)
+  job_code text,        -- the display Job ID (IP-...)
   customer_name text,
   event text,           -- 'Design started', 'New printing job arrived', 'Updated: Quantity', etc.
   actor text,           -- who triggered it ('design' / 'print' / 'owner')

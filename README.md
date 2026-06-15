@@ -62,7 +62,7 @@ The app is a **PWA** — once deployed, users can install it as a desktop / phon
 ## 3. Features at a glance
 
 - Single shared login (Supabase Auth), session is remembered.
-- Auto-generated Job IDs: `IPO-2026-001`, `IPO-2026-002`, ...
+- Auto-generated Job IDs: `IP-2026-001`, `IP-2026-002`, ...
 - 3-step new job form with progress bar, auto-save draft.
 - Smart job-type dropdown — custom types added 3+ times become permanent.
 - Flex jobs ask for width / height + unit (ft / inches).

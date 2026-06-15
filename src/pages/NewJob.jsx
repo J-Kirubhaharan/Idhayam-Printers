@@ -290,17 +290,17 @@ export default function NewJob() {
         customerId = created.id
       }
 
-      // 2. allocate ONE bill number for the whole order. Single item -> IPO-YYYY-NNN.
-      //    Multiple items -> IPO-YYYY-NNN-1, -2, -3 … so one bill = one base number.
+      // 2. allocate ONE bill number for the whole order. Single item -> -YYYY-NNN.
+      //    Multiple items -> IP-YYYY-NNN-1, -2, -3 … so one bill = one base number.
       const yr = todayIST().slice(0, 4)
       const { data: idRows } = await supabase
-        .from('jobs').select('job_id').like('job_id', `IPO-${yr}-%`)  // includes deleted, so numbers are never reused
+        .from('jobs').select('job_id').like('job_id', `IP-${yr}-%`)  // includes deleted, so numbers are never reused
       let maxBase = 0
       for (const r of idRows || []) {
         const n = parseInt((r.job_id || '').split('-')[2], 10)  // 3rd part = base number, ignores any -suffix
         if (!isNaN(n) && n > maxBase) maxBase = n
       }
-      const baseStr = `IPO-${yr}-${String(maxBase + 1).padStart(3, '0')}`
+      const baseStr = `IP-${yr}-${String(maxBase + 1).padStart(3, '0')}`
       const multi = form.items.length > 1
 
       // distribute the order discount across items (proportional to each line total;

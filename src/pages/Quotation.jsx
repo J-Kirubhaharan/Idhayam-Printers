@@ -204,10 +204,10 @@ export default function Quotation() {
         {/* Top: big logo + shop name (left), small QUOTATION (right) */}
         <div className="px-10 pt-10 flex items-start justify-between gap-6">
           <div className="flex items-center gap-4">
-            <ShopLogo size={96} />
+            <ShopLogo size={120} />
             <div>
-              <div className="font-heading font-extrabold text-3xl text-ink leading-none">Idhayam</div>
-              <div className="text-base tracking-[0.28em] text-press font-bold mt-1">PRINTERS</div>
+              <div className="font-heading font-extrabold text-5xl text-ink leading-none">IDHAYAM</div>
+              <div className="text-2xl tracking-[0.28em] text-press font-bold mt-1">PRINTERS</div>
             </div>
           </div>
           <h1 className="font-heading font-extrabold text-4xl text-ink-300 leading-none tracking-tight shrink-0">QUOTATION</h1>

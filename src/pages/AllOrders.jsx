@@ -11,13 +11,13 @@ import EmptyState from '../components/EmptyState'
 import ShopLogo from '../components/ShopLogo'
 import JobDetailPanel from '../components/JobDetailPanel'
 
-// the bill number is the shared base, e.g. IPO-2026-011 (strip only the -1/-2 item
-// suffix on multi-item orders; a plain IPO-YYYY-NNN id is kept as-is)
+// the bill number is the shared base, e.g. IP-2026-011 (strip only the -1/-2 item
+// suffix on multi-item orders; a plain IP-YYYY-NNN id is kept as-is)
 const billNoOf = (jobId) => {
   const p = (jobId || '').split('-')
   return p.length > 3 ? p.slice(0, 3).join('-') : (jobId || '')
 }
-// numeric sort key from a bill id: IPO-2026-011 -> 2026 * 100000 + 11
+// numeric sort key from a bill id: IP-2026-011 -> 2026 * 100000 + 11
 const sortKeyOf = (billNo) => {
   const p = billNo.split('-')
   const yr = parseInt(p[1], 10) || 0
