@@ -18,7 +18,7 @@ export default function ShopLogo({ size = 104, className = '' }) {
 
   return (
     <img
-      src="/logo.png"
+      src="/logo-transparent.png"
       alt="Idhayam Printers"
       onError={() => setErr(true)}
       style={{ width: size, height: size }}

@@ -134,10 +134,13 @@ function Icon({ name }) {
 }
 
 function Logo() {
-  // Placeholder logo: monogram in a rounded square
   return (
-    <div className="w-10 h-10 rounded-xl bg-press flex items-center justify-center shadow-md flex-shrink-0">
-      <span className="font-heading font-extrabold text-white text-lg leading-none">IP</span>
+    <div className="w-10 h-10 rounded-xl bg-white p-1 flex items-center justify-center overflow-hidden">
+      <img
+        src="/logo.png"
+        alt="Idhayam Printers Logo"
+        className="w-full h-full object-contain"
+      />
     </div>
   )
 }

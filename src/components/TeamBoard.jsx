@@ -130,8 +130,12 @@ export default function TeamBoard({ team }) {
     <div className="min-h-screen bg-paper flex flex-col">
       <header className="bg-ink text-white px-5 sm:px-8 py-4 flex items-center justify-between gap-4 shadow-md sticky top-0 z-10">
         <div className="flex items-center gap-3 min-w-0">
-          <div className={`w-11 h-11 rounded-xl ${cfg.accent} flex items-center justify-center shrink-0`}>
-            <span className="font-heading font-extrabold text-white text-lg leading-none">IP</span>
+          <div className="w-11 h-11 rounded-xl bg-white p-1 flex items-center justify-center shrink-0 overflow-hidden">
+            <img
+              src="/logo.png"
+              alt="Idhayam Printers Logo"
+              className="w-full h-full object-contain"
+            />
           </div>
           <div className="min-w-0">
             <div className="font-heading font-bold text-lg sm:text-xl leading-tight truncate">{t(cfg.titleKey)}</div>
