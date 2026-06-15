@@ -55,7 +55,7 @@ export default function Login() {
           </h1>
           
           <h2 className="mt-15 space-y-1 text-[14px] text-ink-300">
-            <div>Near Police Station, Kalaiyarkoil, Sivaganga · 630551, Tamil Nadu</div>
+            <div>Near Police Station, Kalaiyarkoil, Sivaganga - 630551, Tamil Nadu</div>
             <div>+91 70949 46595 · +91 63818 40450 · +91 84281 08001</div>
             <div>idhayamoffsetkkoil@gmail.com</div>
           </h2>
