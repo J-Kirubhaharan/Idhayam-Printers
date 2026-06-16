@@ -42,17 +42,28 @@ export default function Login() {
       {/* Brand panel */}
       <div className="hidden lg:flex w-1/2 bg-ink relative overflow-hidden ink-drop">
         <div className="relative z-10 flex flex-col justify-center px-16 text-white">
-          <div className="w-24 h-24 rounded-2xl bg-white flex items-center justify-center shadow-md mb-6 overflow-hidden p-1">
+          <div
+  className="w-24 h-24 rounded-2xl bg-white flex items-center justify-center mb-6 overflow-hidden p-1"
+  style={{
+    boxShadow:
+      '0 0 18px rgba(255, 255, 255, 0.85), 0 0 35px rgba(0, 166, 255, 0.45), 0 0 55px rgba(255, 0, 92, 0.35)'
+  }}
+>
   <img
     src="/logo.png"
     alt="Idhayam Printers Logo"
     className="w-full h-full object-contain"
   />
 </div>
-          <h1 className="font-heading font-extrabold text-4xl leading-tight mb-3">
-            IDHAYAM  
-            PRINTERS
-          </h1>
+          <h1
+  className="font-heading font-extrabold text-4xl leading-tight mb-3 bg-gradient-to-r from-[#ff005c] via-[#00a6ff] to-[#ffbf00] bg-clip-text text-transparent"
+  style={{
+    WebkitTextStroke: '0.5px rgba(43, 39, 39, 0.92)',
+    textShadow: '0 2px 8px rgba(172, 193, 17, 0.35)'
+  }}
+>
+  IDHAYAM PRINTERS
+</h1>
           
           <h2 className="mt-15 space-y-1 text-[14px] text-ink-300">
             <div>Near Police Station, Kalaiyarkoil, Sivaganga - 630551, Tamil Nadu</div>
