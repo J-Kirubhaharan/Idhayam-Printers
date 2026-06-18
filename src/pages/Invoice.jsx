@@ -46,10 +46,26 @@ export default function Invoice() {
   const handlePrint = () => window.print()
 
   const handleDownload = async () => {
-    if (!printRef.current) return
-    setDownloading(true)
-    try {
-      const canvas = await html2canvas(printRef.current, { scale: 2, backgroundColor: '#ffffff', useCORS: true })
+  if (!printRef.current) return
+  setDownloading(true)
+
+  try {
+    // Wait for fonts to load before PDF capture
+    if (document.fonts?.ready) {
+      await document.fonts.ready
+    }
+
+    // Wait for logo/images to load before PDF capture
+    const images = printRef.current.querySelectorAll('img')
+    await Promise.all(
+      Array.from(images).map((img) => {
+        if (img.complete) return Promise.resolve()
+        return new Promise((resolve) => {
+          img.onload = resolve
+          img.onerror = resolve
+        })
+      })
+    )
       const img = canvas.toDataURL('image/jpeg', 0.95)
       const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true })
       const pageW = pdf.internal.pageSize.getWidth()
@@ -116,16 +132,22 @@ export default function Invoice() {
         className="bg-white shadow-card mx-auto flex flex-col"
         style={{ width: '794px', minHeight: '1123px' }}>
         {/* Top: logo + shop name (left), INVOICE wordmark (right) */}
-        <div className="px-9 pt-9 pb-7 flex items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <ShopLogo size={88} />
-            <div>
-              <div className="font-heading font-extrabold text-3xl text-ink leading-none">Idhayam</div>
-              <div className="text-base tracking-[0.28em] text-press font-bold mt-1">PRINTERS</div>
-            </div>
-          </div>
-          <h1 className="font-heading font-extrabold text-5xl tracking-[0.18em] text-charcoal leading-none">INVOICE</h1>
-        </div>
+        <div className="px-9 pt-9 pb-7 flex items-start justify-between gap-6">
+  <div className="flex items-start gap-4">
+    <ShopLogo size={88} />
+    <div className="pdf-brand-text">
+      <div className="font-heading font-extrabold text-3xl text-ink leading-none">IDHAYAM</div>
+      <div className="text-base tracking-[0.28em] text-press font-bold mt-1 leading-none">PRINTERS</div>
+    </div>
+  </div>
+
+  <h1
+    className="pdf-invoice-title font-heading font-extrabold text-5xl tracking-[0.18em] text-charcoal leading-none"
+    style={{ transform: 'translateY(-12px)' }}
+  >
+    INVOICE
+  </h1>
+</div>
 
         {/* Parties + meta */}
         <div className="px-9 grid grid-cols-2 gap-8">
@@ -200,19 +222,13 @@ export default function Invoice() {
               <span className="text-gray-500">Sub Total</span>
               <span className="font-mono">{formatINR(job.total_amount)}</span>
             </div>
-            {discount > 0 && (
-              <div className="flex justify-between py-2 border-b border-gray-200">
-                <span className="text-gray-500">Discount</span>
-                <span className="font-mono text-press">− {formatINR(discount)}</span>
-              </div>
-            )}
             <div className="flex justify-between py-2 border-b border-gray-200">
               <span className="text-gray-500">Paid</span>
               <span className="font-mono text-leaf">{formatINR(paid)}</span>
             </div>
             <div className="flex justify-between items-center bg-charcoal text-white px-4 py-3 mt-2 rounded-md">
               <span className="font-bold tracking-wide">TOTAL</span>
-              <span className="font-mono font-bold text-lg">{formatINR(netTotal)}</span>
+              <span className="font-mono font-bold text-lg">{formatINR(job.total_amount)}</span>
             </div>
           </div>
         </div>

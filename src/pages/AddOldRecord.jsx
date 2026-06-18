@@ -45,7 +45,11 @@ export default function AddOldRecord() {
   useEffect(() => {
     supabase.from('customers').select('id,name,contact,alt_contact,place').order('name')
       .then(({ data }) => setCustomers(data || []))
-    supabase.from('job_types').select('name').order('name').then(({ data }) => {
+    supabase
+  .from('job_types')
+  .select('name')
+  .order('sort_order', { ascending: true })
+  .order('name', { ascending: true }).then(({ data }) => {
       if (data?.length) {
         const names = data.map((x) => x.name)
         const extras = names.filter((n) => !DEFAULT_TYPES.includes(n))

@@ -73,11 +73,24 @@ export default function Quotation() {
   const handlePrint = () => window.print()
 
   const handleDownload = async () => {
-    if (!printRef.current) return
-    if (validItems.length === 0) return toast.error('Add at least one item')
-    setDownloading(true)
-    try {
-      const canvas = await html2canvas(printRef.current, { scale: 2, backgroundColor: '#ffffff', useCORS: true })
+  if (!printRef.current) return
+  if (validItems.length === 0) return toast.error('Add at least one item')
+
+  setDownloading(true)
+
+  try {
+    // Wait for downloading=true style to apply and fonts/images to settle before PDF capture
+    await document.fonts.ready
+    await new Promise((resolve) => setTimeout(resolve, 300))
+
+    const canvas = await html2canvas(printRef.current, {
+      scale: 2,
+      backgroundColor: '#ffffff',
+      useCORS: true,
+      logging: false,
+      windowWidth: printRef.current.scrollWidth,
+      windowHeight: printRef.current.scrollHeight,
+    })
       const img = canvas.toDataURL('image/jpeg', 0.95)
       const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true })
       const pageW = pdf.internal.pageSize.getWidth()
@@ -204,13 +217,17 @@ export default function Quotation() {
         {/* Top: big logo + shop name (left), small QUOTATION (right) */}
         <div className="px-10 pt-10 flex items-start justify-between gap-6">
           <div className="flex items-center gap-4">
-            <ShopLogo size={120} />
-            <div>
-              <div className="font-heading font-extrabold text-5xl text-ink leading-none">IDHAYAM</div>
-              <div className="text-2xl tracking-[0.28em] text-press font-bold mt-1">PRINTERS</div>
-            </div>
-          </div>
-          <h1 className="font-heading font-extrabold text-4xl text-ink-300 leading-none tracking-tight shrink-0">QUOTATION</h1>
+  <ShopLogo size={120} />
+  <div
+    style={{
+      transform: downloading ? 'translateY(-20px)' : 'translateY(0)',
+    }}
+  >
+    <div className="font-heading font-extrabold text-5xl text-ink leading-none">IDHAYAM</div>
+    <div className="text-2xl tracking-[0.28em] text-press font-bold mt-1 leading-none">PRINTERS</div>
+  </div>
+</div>
+          <h1 className="font-heading font-extrabold text-4xl text-ink-300 leading-none tracking-tight shrink-0 mt-2">QUOTATION</h1>
         </div>
 
         {/* Subject line (the customer's shop / business) */}

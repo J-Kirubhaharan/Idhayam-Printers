@@ -41,10 +41,58 @@ export default function OrderInvoice() {
   const handlePrint = () => window.print()
 
   const handleDownload = async () => {
-    if (!printRef.current) return
-    setDownloading(true)
-    try {
-      const canvas = await html2canvas(printRef.current, { scale: 2, backgroundColor: '#ffffff', useCORS: true })
+  if (!printRef.current) return
+  setDownloading(true)
+
+  try {
+    // Wait for fonts to load
+    if (document.fonts?.ready) {
+      await document.fonts.ready
+    }
+
+    // Wait for logo/images to load
+    const images = printRef.current.querySelectorAll('img')
+    await Promise.all(
+      Array.from(images).map((img) => {
+        if (img.complete) return Promise.resolve()
+        return new Promise((resolve) => {
+          img.onload = resolve
+          img.onerror = resolve
+        })
+      })
+    )
+
+    await new Promise((resolve) => setTimeout(resolve, 300))
+
+    const canvas = await html2canvas(printRef.current, {
+      scale: 2,
+      backgroundColor: '#ffffff',
+      useCORS: true,
+      logging: false,
+      windowWidth: printRef.current.scrollWidth,
+      windowHeight: printRef.current.scrollHeight,
+
+      // Download-only alignment fixes
+      onclone: (clonedDoc) => {
+        const brandText = clonedDoc.querySelector('.pdf-brand-text')
+        if (brandText) {
+          brandText.style.transform = 'translateY(-14px)'
+          brandText.style.display = 'inline-block'
+        }
+
+        const invoiceTitle = clonedDoc.querySelector('.pdf-invoice-title')
+        if (invoiceTitle) {
+          invoiceTitle.style.transform = 'translateY(-10px)'
+          invoiceTitle.style.display = 'inline-block'
+        }
+
+        clonedDoc.querySelectorAll('.pdf-footer-text').forEach((el) => {
+          el.style.transform = 'translateY(-7px)'
+          el.style.display = 'inline-block'
+          el.style.lineHeight = '1'
+        })
+      },
+    })
       const img = canvas.toDataURL('image/jpeg', 0.95)
       const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true })
       const pageW = pdf.internal.pageSize.getWidth()

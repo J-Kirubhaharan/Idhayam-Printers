@@ -21,6 +21,28 @@ const DEFAULT_TYPES = [
 ]
 const PAPER_SIZES = ['A3', 'A4', 'A5', 'A6', 'Other']
 
+const EMPTY_EXTRA_ITEM = {
+  jobType: '',
+  customJobType: '',
+  paperSize: '',
+  customPaperSize: '',
+  flexWidth: '',
+  flexHeight: '',
+  flexUnit: 'ft',
+  quantity: '',
+  rate: '',
+  notes: '',
+  needs_design: false,
+  needs_printing: false,
+  paymentAmount: '',
+  paymentType: 'Cash'
+}
+
+const baseBillNoOf = (jobId) => {
+  const parts = (jobId || '').split('-')
+  return parts.length > 3 ? parts.slice(0, 3).join('-') : (jobId || '')
+}
+
 // the WhatsApp button label key for each delivery status
 const WA_KEYS = {
   'Pending': 'jd.waPending',
@@ -43,6 +65,8 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
   const [payAmount, setPayAmount] = useState('')
   const [payType, setPayType] = useState('Cash')
   const [jobTypes, setJobTypes] = useState(DEFAULT_TYPES)
+  const [showAddItem, setShowAddItem] = useState(false)
+const [extraItem, setExtraItem] = useState(EMPTY_EXTRA_ITEM)
 
   // load job types (defaults + custom permanents) for the Edit tab dropdown
   useEffect(() => {
@@ -81,8 +105,10 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
       flexUnit: job.flex_unit || 'ft'
     })
     setPayAmount('')
-    setPayType('Cash')
-    loadPayments(job.id)
+setPayType('Cash')
+setShowAddItem(false)
+setExtraItem({ ...EMPTY_EXTRA_ITEM })
+loadPayments(job.id)
   }, [job])
 
   const loadPayments = async (id) => {
@@ -107,6 +133,155 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
     setForm((f) => ({ ...f, status }))
     onChanged?.()
   }
+
+  const getNextExtraJobId = async (group, baseBillNo) => {
+  const { data, error } = await supabase
+    .from('jobs')
+    .select('job_id')
+    .eq('order_group', group)
+    .is('deleted_at', null)
+
+  if (error) throw error
+
+  const suffixes = (data || []).map((x) => {
+    const id = x.job_id || ''
+
+    if (id === baseBillNo) return 1
+
+    if (id.startsWith(`${baseBillNo}-`)) {
+      return Number(id.replace(`${baseBillNo}-`, '')) || 1
+    }
+
+    return 1
+  })
+
+  const next = Math.max(1, ...suffixes) + 1
+  return `${baseBillNo}-${next}`
+}
+
+const addItemToSameBill = async () => {
+  const qty = Number(extraItem.quantity) || 0
+  const rate = Number(extraItem.rate) || 0
+  const total = qty * rate
+  const paymentAmount = Number(extraItem.paymentAmount) || 0
+
+  if (!job.customer_id) return toast.error('Customer is missing for this job')
+  if (!extraItem.jobType) return toast.error('Select a job type')
+  if (extraItem.jobType === 'Other' && !extraItem.customJobType.trim()) {
+    return toast.error('Enter the custom job type')
+  }
+  if (extraItem.paperSize === 'Other' && !extraItem.customPaperSize.trim()) {
+    return toast.error('Enter the custom paper size')
+  }
+  if (qty <= 0) return toast.error('Quantity must be greater than 0')
+  if (rate < 0) return toast.error('Rate cannot be negative')
+  if (paymentAmount > total) return toast.error('Payment cannot be more than item total')
+
+  setBusy(true)
+
+  try {
+    const group = job.order_group || job.id
+    const baseBillNo = baseBillNoOf(job.job_id)
+
+    // If this old job does not have order_group, make its own id the group.
+    if (!job.order_group) {
+      const { error: groupErr } = await supabase
+        .from('jobs')
+        .update({ order_group: group })
+        .eq('id', job.id)
+
+      if (groupErr) throw groupErr
+    }
+
+    const newJobId = await getNextExtraJobId(group, baseBillNo)
+
+    const productionStage = extraItem.needs_design
+      ? 'Design Queue'
+      : extraItem.needs_printing
+        ? 'Print Queue'
+        : 'None'
+
+    const { data: newJob, error: jobErr } = await supabase
+      .from('jobs')
+      .insert({
+        job_id: newJobId,
+        customer_id: job.customer_id,
+
+        job_type: extraItem.jobType,
+        custom_job_type: extraItem.jobType === 'Other' ? extraItem.customJobType.trim() : null,
+
+        paper_size: extraItem.paperSize || null,
+        custom_paper_size: extraItem.paperSize === 'Other' ? extraItem.customPaperSize.trim() : null,
+
+        flex_width: extraItem.jobType === 'Flex' ? (extraItem.flexWidth || null) : null,
+        flex_height: extraItem.jobType === 'Flex' ? (extraItem.flexHeight || null) : null,
+        flex_unit: extraItem.jobType === 'Flex' ? extraItem.flexUnit : null,
+
+        quantity: qty,
+        rate,
+        total_amount: total,
+        discount: 0,
+
+        payment_type: paymentAmount > 0 ? extraItem.paymentType : 'Credit',
+        status: 'Pending',
+
+        delivery_date: form.delivery_date || job.delivery_date || null,
+        delivery_time: form.delivery_time || job.delivery_time || null,
+        notes: extraItem.notes || null,
+
+        is_urgent: !!form.is_urgent,
+
+        needs_design: extraItem.needs_design,
+        needs_printing: extraItem.needs_printing,
+        design_assignee: form.design_assignee?.trim() || null,
+        print_assignee: form.print_assignee?.trim() || null,
+        production_stage: productionStage,
+
+        order_group: group
+      })
+      .select('id, job_id')
+      .single()
+
+    if (jobErr) throw jobErr
+
+    if (paymentAmount > 0) {
+      const { error: payErr } = await supabase.from('payments').insert({
+        job_id: newJob.id,
+        amount: paymentAmount,
+        payment_type: extraItem.paymentType
+      })
+
+      if (payErr) throw payErr
+    }
+
+    const target = extraItem.needs_design ? 'design' : extraItem.needs_printing ? 'print' : null
+
+    if (target) {
+      await supabase.from('activity_log').insert({
+        job_id: newJob.id,
+        job_code: newJob.job_id,
+        customer_name: form.customerName.trim() || job.customers?.name || '-',
+        event: `New item added to bill ${baseBillNo}`,
+        actor: 'owner',
+        target
+      })
+    }
+
+    window.dispatchEvent(new Event('idhayam:refresh-notifs'))
+
+    toast.success(`Item added to bill ${baseBillNo}`)
+
+    setShowAddItem(false)
+    setExtraItem({ ...EMPTY_EXTRA_ITEM })
+
+    onChanged?.()
+  } catch (e) {
+    console.error(e)
+    toast.error('Could not add item to bill')
+  } finally {
+    setBusy(false)
+  }
+}
 
   const saveEdits = async () => {
     const qty = Number(form.quantity) || 0
@@ -487,6 +662,204 @@ export default function JobDetailPanel({ job, onClose, onChanged, onDuplicate })
                     {formatINR((Number(form.quantity) || 0) * (Number(form.rate) || 0))}
                   </span>
                 </div>
+
+                <div className="border border-ink-100 rounded-2xl bg-white overflow-hidden">
+  <button
+    type="button"
+    className="w-full px-4 py-3 flex items-center justify-between font-semibold text-ink hover:bg-ink-50"
+    onClick={() => setShowAddItem((v) => !v)}
+  >
+    <span>+ Add Item to Same Bill</span>
+    <span className="text-ink-300">{showAddItem ? '−' : '+'}</span>
+  </button>
+
+  {showAddItem && (
+    <div className="p-4 border-t border-ink-100 space-y-3">
+      <div className="text-xs text-ink-300">
+        This creates a new item under the same bill/invoice.
+      </div>
+
+      <div>
+        <label className="label">Extra Job Type</label>
+        <select
+          className="input"
+          value={extraItem.jobType}
+          onChange={(e) => setExtraItem({ ...extraItem, jobType: e.target.value })}
+        >
+          <option value="">Select type...</option>
+          {jobTypes.map((jt) => <option key={jt} value={jt}>{jt}</option>)}
+          <option value="Other">Other</option>
+        </select>
+      </div>
+
+      {extraItem.jobType === 'Other' && (
+        <div>
+          <label className="label">Custom Job Type</label>
+          <input
+            className="input"
+            value={extraItem.customJobType}
+            onChange={(e) => setExtraItem({ ...extraItem, customJobType: e.target.value })}
+          />
+        </div>
+      )}
+
+      {extraItem.jobType === 'Flex' && (
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="label">Width</label>
+            <input
+              type="number"
+              className="input font-mono"
+              value={extraItem.flexWidth}
+              onChange={(e) => setExtraItem({ ...extraItem, flexWidth: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="label">Height</label>
+            <input
+              type="number"
+              className="input font-mono"
+              value={extraItem.flexHeight}
+              onChange={(e) => setExtraItem({ ...extraItem, flexHeight: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="label">Unit</label>
+            <select
+              className="input"
+              value={extraItem.flexUnit}
+              onChange={(e) => setExtraItem({ ...extraItem, flexUnit: e.target.value })}
+            >
+              <option value="ft">ft</option>
+              <option value="inches">inches</option>
+            </select>
+          </div>
+        </div>
+      )}
+
+      <div>
+        <label className="label">Paper Size</label>
+        <select
+          className="input"
+          value={extraItem.paperSize}
+          onChange={(e) => setExtraItem({ ...extraItem, paperSize: e.target.value })}
+        >
+          <option value="">Select size...</option>
+          {PAPER_SIZES.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+
+      {extraItem.paperSize === 'Other' && (
+        <div>
+          <label className="label">Custom Size</label>
+          <input
+            className="input"
+            value={extraItem.customPaperSize}
+            onChange={(e) => setExtraItem({ ...extraItem, customPaperSize: e.target.value })}
+          />
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="label">Quantity</label>
+          <input
+            type="number"
+            className="input font-mono"
+            value={extraItem.quantity}
+            onChange={(e) => setExtraItem({ ...extraItem, quantity: e.target.value })}
+          />
+        </div>
+
+        <div>
+          <label className="label">Rate (₹)</label>
+          <input
+            type="number"
+            className="input font-mono"
+            value={extraItem.rate}
+            onChange={(e) => setExtraItem({ ...extraItem, rate: e.target.value })}
+          />
+        </div>
+      </div>
+
+      <div className="card bg-leaf/5 flex items-center justify-between">
+        <span className="label mb-0">Extra Item Total</span>
+        <span className="font-mono font-semibold text-leaf text-lg">
+          {formatINR((Number(extraItem.quantity) || 0) * (Number(extraItem.rate) || 0))}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => setExtraItem({ ...extraItem, needs_design: !extraItem.needs_design })}
+          className={`btn text-sm ${extraItem.needs_design ? 'bg-press text-white' : 'btn-outline'}`}
+        >
+          Needs Design
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setExtraItem({ ...extraItem, needs_printing: !extraItem.needs_printing })}
+          className={`btn text-sm ${extraItem.needs_printing ? 'bg-ink text-white' : 'btn-outline'}`}
+        >
+          Needs Printing
+        </button>
+      </div>
+
+      <div className="border-t border-ink-100 pt-3 space-y-3">
+        <div className="text-xs font-semibold text-ink-300">
+          Payment for extra item optional
+        </div>
+
+        <div>
+          <label className="label">Amount Received Now</label>
+          <input
+            type="number"
+            className="input font-mono"
+            placeholder="Leave empty if unpaid"
+            value={extraItem.paymentAmount}
+            onChange={(e) => setExtraItem({ ...extraItem, paymentAmount: e.target.value })}
+          />
+        </div>
+
+        <div>
+          <label className="label">Payment Type</label>
+          <div className="grid grid-cols-2 gap-2">
+            {['Cash', 'UPI'].map((pt) => (
+              <button
+                key={pt}
+                type="button"
+                onClick={() => setExtraItem({ ...extraItem, paymentType: pt })}
+                className={`btn text-sm ${extraItem.paymentType === pt ? 'bg-ink text-white' : 'btn-outline'}`}
+              >
+                {pt}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <label className="label">Extra Item Notes</label>
+        <textarea
+          className="input min-h-[70px]"
+          value={extraItem.notes}
+          onChange={(e) => setExtraItem({ ...extraItem, notes: e.target.value })}
+        />
+      </div>
+
+      <button
+        type="button"
+        className="btn-accent w-full"
+        disabled={busy}
+        onClick={addItemToSameBill}
+      >
+        {busy ? 'Adding...' : 'Add Item to Bill'}
+      </button>
+    </div>
+  )}
+</div>
 
                 {/* Delivery status + urgent + assign */}
                 <div>

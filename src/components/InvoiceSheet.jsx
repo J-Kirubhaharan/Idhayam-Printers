@@ -33,12 +33,12 @@ export default function InvoiceSheet({ jobs, paid = 0, innerRef }) {
   const typeOf = (j) => j.job_type === 'Other' ? j.custom_job_type : j.job_type
 
   return (
-    <div ref={innerRef} className="bg-white flex flex-col" style={{ width: '794px', minHeight: '1123px' }}>
+    <div ref={innerRef} className="invoice-sheet bg-white flex flex-col" style={{ width: '794px', minHeight: '1123px' }}>
       {/* Top: logo + shop name (left), INVOICE wordmark (right) */}
       <div className="px-9 pt-9 pb-7 flex items-center justify-between gap-6">
         <div className="flex items-center gap-4">
           <ShopLogo size={120} />
-          <div>
+          <div className="pdf-brand-text">
             <div className="font-heading font-extrabold text-5xl text-ink leading-none">IDHAYAM</div>
             <div className="text-2xl tracking-[0.28em] text-press font-bold mt-1">PRINTERS</div>
           </div>
@@ -144,10 +144,27 @@ export default function InvoiceSheet({ jobs, paid = 0, innerRef }) {
 
       {/* Footer band */}
       <div className="mt-9 bg-charcoal text-white px-9 py-5 flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-2"><PhoneBadge /><span>{SHOP.phones}</span></div>
-        <div className="flex items-center gap-2"><PinBadge /><span>{SHOP.address}</span></div>
-        <div className="flex items-center gap-2"><MailBadge /><span>{SHOP.email}</span></div>
-      </div>
+  <div className="flex items-center gap-2 leading-none">
+    <PhoneBadge />
+    <span className="pdf-footer-text inline-block leading-none relative -top-[1px]">
+      {SHOP.phones}
+    </span>
+  </div>
+
+  <div className="flex items-center gap-2 leading-none">
+    <PinBadge />
+    <span className="pdf-footer-text inline-block leading-none relative -top-[1px]">
+      {SHOP.address}
+    </span>
+  </div>
+
+  <div className="flex items-center gap-2 leading-none">
+    <MailBadge />
+    <span className="pdf-footer-text inline-block leading-none relative -top-[1px]">
+      {SHOP.email}
+    </span>
+  </div>
+</div>
     </div>
   )
 }
