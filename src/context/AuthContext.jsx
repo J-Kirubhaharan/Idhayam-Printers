@@ -18,14 +18,23 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
+    // Safety: never leave the app stuck on the "Loading…" screen — if auth
+    // resolution stalls for any reason, stop blocking after 6s.
+    const failsafe = setTimeout(() => setLoading(false), 6000)
     supabase.auth.getSession().then(async ({ data }) => {
       setSession(data.session ?? null)
       await loadRole(data.session)
       setLoading(false)
+      clearTimeout(failsafe)
     })
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_e, s) => {
+    // NOTE: do NOT await a Supabase query directly inside this callback —
+    // supabase-js holds an internal auth lock here, and another Supabase call
+    // (loadRole queries 'profiles') can deadlock it. On a cold PWA launch that
+    // left the app stuck on the "Loading…" screen until a manual refresh.
+    // Defer loadRole out of the callback so the lock is released first.
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
       setSession(s)
-      await loadRole(s)
+      setTimeout(() => { loadRole(s) }, 0)
     })
     return () => sub.subscription.unsubscribe()
   }, [])
